@@ -58,8 +58,15 @@ def get_nifty_constituents():
         # Create dictionary with .NS appended to symbol
         result = {}
         for sym, name in zip(symbols, names):
-            clean_sym = f"{sym.strip()}.NS"
-            result[clean_sym] = name.strip()
+            sym_str = sym.strip()
+            name_str = name.strip()
+
+            # Filter out DUMMY symbols
+            if sym_str.upper().startswith("DUMMY") or name_str.upper().startswith("DUMMY"):
+                continue
+
+            clean_sym = f"{sym_str}.NS"
+            result[clean_sym] = name_str
 
         return result
 

@@ -85,5 +85,25 @@ class TestMomentum(unittest.TestCase):
         # Stock B is at low, so it should fail 52W high and 50 EMA
         self.assertFalse(row_b['Filters Passed'])
 
+    @patch('requests.get')
+    def test_get_nifty_constituents_dummy_filter(self, mock_get):
+        # Mock CSV content
+        csv_content = """Company Name,Industry,Symbol,Series,ISIN Code
+        Valid Co,Ind,VALID,EQ,INE123
+        Dummy Co,Ind,DUMMY001,EQ,INE456
+        Another Co,Ind,DUMMYTEST,EQ,INE789
+        """
+
+        mock_response = unittest.mock.Mock()
+        mock_response.status_code = 200
+        mock_response.content = csv_content.encode('utf-8')
+        mock_get.return_value = mock_response
+
+        constituents = momentum.get_nifty_constituents()
+
+        self.assertIn('VALID.NS', constituents)
+        self.assertNotIn('DUMMY001.NS', constituents)
+        self.assertNotIn('DUMMYTEST.NS', constituents)
+
 if __name__ == '__main__':
     unittest.main()
