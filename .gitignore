@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+nifty_momentum_ranking.csv
+*.log
