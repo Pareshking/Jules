@@ -67,7 +67,9 @@ if st.session_state.results is not None:
         'Current Rank': '{:.0f}',
         'Rank 1M Ago': '{:.0f}',
         'Rank 2M Ago': '{:.0f}',
-        'Rank 3M Ago': '{:.0f}'
+        'Rank 3M Ago': '{:.0f}',
+        '50 EMA': '{:.2f}',
+        '52W High': '{:.2f}'
     }))
 
     # Download Button

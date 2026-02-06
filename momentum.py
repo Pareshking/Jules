@@ -212,8 +212,25 @@ def generate_full_ranking(subset_size=None):
         df['Momentum Score'] = np.nan
 
     # Add Company Name using the mapping
-    # Note: prices.columns are the symbols
-    df['Company Name'] = df.index.map(tickers_dict)
+    # Create a fallback dictionary without .NS extension just in case
+    tickers_dict_no_ns = {k.replace('.NS', ''): v for k, v in tickers_dict.items()}
+
+    def map_name(ticker):
+        if ticker in tickers_dict:
+            return tickers_dict[ticker]
+        # Try without .NS
+        ticker_no_ns = ticker.replace('.NS', '')
+        if ticker_no_ns in tickers_dict_no_ns:
+            return tickers_dict_no_ns[ticker_no_ns]
+        return "Unknown"
+
+    df['Company Name'] = df.index.map(map_name)
+
+    # Debug: Check for Unknowns
+    unknowns = df[df['Company Name'] == 'Unknown']
+    if not unknowns.empty:
+        print(f"Warning: {len(unknowns)} tickers could not be mapped to a company name.")
+        print(f"First 5 unknown tickers: {unknowns.index.tolist()[:5]}")
 
     df['Price'] = current_prices
     df['50 EMA'] = ema_50

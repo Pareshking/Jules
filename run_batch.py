@@ -30,6 +30,12 @@ def main():
     # Ensure columns exist
     report_cols = [c for c in report_cols if c in df.columns]
 
+    # Round numerical columns to 2 decimal places
+    cols_to_round = ['Momentum Score', 'Price', '50 EMA', '52W High']
+    for col in cols_to_round:
+        if col in df.columns:
+            df[col] = df[col].round(2)
+
     df[report_cols].to_csv(output_file, index=False)
 
     print(f"Analysis Complete! Saved {len(df)} rows to '{output_file}'.")
