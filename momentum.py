@@ -8,7 +8,8 @@ from datetime import datetime, timedelta
 def get_nifty_constituents():
     """
     Fetches the Nifty Total Market constituents from the NSE website.
-    Returns a list of symbols with '.NS' appended.
+    Returns a dictionary of {Symbol: Company Name}.
+    Symbol keys have '.NS' appended.
     """
     url = "https://niftyindices.com/IndexConstituent/ind_niftytotalmarket_list.csv"
     headers = {
@@ -38,16 +39,33 @@ def get_nifty_constituents():
             # Fallback
             symbol_col = df.columns[2] # Usually 3rd column
 
-        symbols = df[symbol_col].dropna().astype(str).tolist()
+        # Identify Company Name column
+        name_col = None
+        for col in df.columns:
+            if col.lower() in ['company name', 'security name', 'companyname']:
+                name_col = col
+                break
 
-        # Append .NS
-        cleaned_symbols = [f"{sym.strip()}.NS" for sym in symbols]
+        if not name_col:
+            # Fallback, maybe first column
+            name_col = df.columns[0]
 
-        return cleaned_symbols
+        df = df.dropna(subset=[symbol_col])
+
+        symbols = df[symbol_col].astype(str).tolist()
+        names = df[name_col].astype(str).tolist()
+
+        # Create dictionary with .NS appended to symbol
+        result = {}
+        for sym, name in zip(symbols, names):
+            clean_sym = f"{sym.strip()}.NS"
+            result[clean_sym] = name.strip()
+
+        return result
 
     except Exception as e:
         print(f"Error fetching Nifty constituents: {e}")
-        return []
+        return {}
 
 def fetch_data(tickers, period="3y"):
     """
@@ -72,9 +90,6 @@ def fetch_data(tickers, period="3y"):
     if 'Close' in data.columns:
         close_data = data['Close']
     else:
-        # Sometimes yfinance returns just the price dataframe if only one type requested?
-        # But with download(..., auto_adjust=True), it returns Open, High, Low, Close, Volume
-        # If columns are MultiIndex, 'Close' is level 0.
         close_data = data
 
     # Ensure it's a DataFrame (dates x tickers)
@@ -124,8 +139,6 @@ def calculate_momentum_metrics(prices):
 
         # Handle NaNs: If a stock has NaN Sharpe (e.g. newly listed), Z-Score is NaN.
         # We fill NaN with 0 (neutral score) so it doesn't break the sum.
-        # However, purely relying on this might bias towards 0.
-        # But for ranking, 0 is average.
         weighted_z_score = weighted_z_score.add(z_score.fillna(0) * weight, fill_value=0)
 
     return weighted_z_score
@@ -134,21 +147,21 @@ def generate_full_ranking(subset_size=None):
     """
     Orchestrates the data fetching, calculation, and report generation.
     """
-    # 1. Fetch Tickers
-    tickers = get_nifty_constituents()
-    if subset_size:
-        tickers = tickers[:subset_size]
+    # 1. Fetch Tickers and Names
+    tickers_dict = get_nifty_constituents()
+    all_tickers = list(tickers_dict.keys())
 
-    if not tickers:
+    if subset_size:
+        all_tickers = all_tickers[:subset_size]
+
+    if not all_tickers:
         print("No tickers found.")
         return pd.DataFrame()
 
     # 2. Fetch Data
-    # We need enough history for filters and lookbacks
-    prices = fetch_data(tickers, period="3y")
+    prices = fetch_data(all_tickers, period="3y")
 
-    # Filter valid stocks (must have data for at least 1.5 years ideally, but let's say 300 days)
-    # The longest lookback is 252 days. To calculate Z-score, we need peers.
+    # Filter valid stocks
     min_days = 260
     valid_cols = prices.notna().sum() > min_days
     prices = prices.loc[:, valid_cols]
@@ -164,22 +177,11 @@ def generate_full_ranking(subset_size=None):
         return pd.DataFrame()
 
     # 4. Filters (Current Data)
-    # Use the last available row
     current_prices = prices.iloc[-1]
-
-    # 50 EMA
     ema_50 = prices.ewm(span=50, adjust=False).mean().iloc[-1]
-
-    # 52 Week High (max of last 252 days)
     high_52 = prices.rolling(window=252).max().iloc[-1]
 
     # 5. Build Result DataFrame
-
-    # Indices for T, T-1m, T-2m, T-3m
-    # We use negative indexing based on trading days approx (21 days/month)
-    # Ensure we don't go out of bounds
-    max_idx = len(momentum_scores)
-
     indices = {
         'Current': -1,
         '1M Ago': -22,
@@ -187,50 +189,39 @@ def generate_full_ranking(subset_size=None):
         '3M Ago': -64
     }
 
-    # Helper to get rank series for a specific time offset
+    max_idx = len(momentum_scores)
+
     def get_rank_series(offset_idx):
-        # Check bounds
         if abs(offset_idx) >= max_idx:
             return pd.Series(np.nan, index=momentum_scores.columns)
-
-        # Get scores at that index
         scores = momentum_scores.iloc[offset_idx]
-
-        # Rank descending (Higher score = Rank 1)
-        # Only rank valid scores (non-zero or existing)
-        # Actually rank treats NaNs as lowest?
-        # We filled NaNs with 0. So they are ranked as average.
-        # That's acceptable.
         return scores.rank(ascending=False)
 
-    # Base DataFrame
     df = pd.DataFrame(index=prices.columns)
 
-    # Add Score
     try:
         df['Momentum Score'] = momentum_scores.iloc[indices['Current']]
     except IndexError:
         df['Momentum Score'] = np.nan
 
+    # Add Company Name using the mapping
+    # Note: prices.columns are the symbols
+    df['Company Name'] = df.index.map(tickers_dict)
+
     df['Price'] = current_prices
     df['50 EMA'] = ema_50
     df['52W High'] = high_52
 
-    # Add Ranks
     df['Current Rank'] = get_rank_series(indices['Current'])
     df['Rank 1M Ago'] = get_rank_series(indices['1M Ago'])
     df['Rank 2M Ago'] = get_rank_series(indices['2M Ago'])
     df['Rank 3M Ago'] = get_rank_series(indices['3M Ago'])
 
-    # Apply Filters
     df['Above 50 EMA'] = df['Price'] > df['50 EMA']
     df['Near 52W High'] = df['Price'] >= (0.8 * df['52W High'])
     df['Filters Passed'] = df['Above 50 EMA'] & df['Near 52W High']
 
-    # Sort
     df = df.sort_values('Current Rank')
-
-    # Reset index to make Symbol a column
     df = df.reset_index().rename(columns={'index': 'Symbol'})
 
     return df

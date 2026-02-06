@@ -9,7 +9,12 @@ class TestMomentum(unittest.TestCase):
     def setUp(self):
         # Create dummy price data for 3 stocks over 300 days
         dates = pd.date_range(start='2022-01-01', periods=300, freq='B')
-        self.tickers = ['STOCKA.NS', 'STOCKB.NS', 'STOCKC.NS']
+        self.tickers_list = ['STOCKA.NS', 'STOCKB.NS', 'STOCKC.NS']
+        self.tickers_dict = {
+            'STOCKA.NS': 'Stock A Ltd',
+            'STOCKB.NS': 'Stock B Corp',
+            'STOCKC.NS': 'Stock C Inc'
+        }
 
         # Stock A: Uptrend
         price_a = np.linspace(100, 200, 300) + np.random.normal(0, 2, 300)
@@ -52,7 +57,7 @@ class TestMomentum(unittest.TestCase):
     @patch('momentum.get_nifty_constituents')
     @patch('momentum.fetch_data')
     def test_generate_full_ranking(self, mock_fetch, mock_tickers):
-        mock_tickers.return_value = self.tickers
+        mock_tickers.return_value = self.tickers_dict
         mock_fetch.return_value = self.prices
 
         df = momentum.generate_full_ranking()
@@ -61,6 +66,10 @@ class TestMomentum(unittest.TestCase):
         self.assertIn('Momentum Score', df.columns)
         self.assertIn('Current Rank', df.columns)
         self.assertIn('Filters Passed', df.columns)
+        self.assertIn('Company Name', df.columns)
+
+        # Check mapping
+        self.assertEqual(df[df['Symbol'] == 'STOCKA.NS']['Company Name'].values[0], 'Stock A Ltd')
 
         # Check if Stock A is ranked higher (lower rank number) than Stock B
         # Extract rows

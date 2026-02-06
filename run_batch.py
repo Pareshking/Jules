@@ -20,7 +20,7 @@ def main():
 
     # Select columns for final report
     report_cols = [
-        'Current Rank', 'Symbol', 'Momentum Score',
+        'Current Rank', 'Symbol', 'Company Name', 'Momentum Score',
         'Price', 'Filters Passed',
         'Above 50 EMA', 'Near 52W High',
         'Rank 1M Ago', 'Rank 2M Ago', 'Rank 3M Ago',
