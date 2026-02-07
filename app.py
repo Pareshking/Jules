@@ -1,81 +1,142 @@
 import streamlit as st
 import pandas as pd
-import momentum
+from core.config import INDICES_URLS
+from core.fetcher import get_constituents, fetch_price_data
+from core.momentum import MomentumAnalyzer
 
-st.set_page_config(page_title="Nifty 750 Momentum Ranking", layout="wide")
+# Page Config
+st.set_page_config(
+    page_title="Nifty Momentum Ranking",
+    page_icon="📈",
+    layout="wide"
+)
 
-st.title("Nifty 750 Momentum Ranking System")
+# Caching wrappers
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_tickers_cached(indices_names):
+    return get_constituents(indices_names)
 
-st.markdown("""
-This application ranks Nifty Total Market stocks based on a multi-timeframe volatility-adjusted momentum strategy.
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_prices_cached(tickers):
+    # Fetch 3 years of data to ensure enough history for 1y momentum + lookbacks
+    return fetch_price_data(tickers, period="3y")
 
-**Methodology:**
-- **Universe:** Nifty Total Market (~750 stocks)
-- **Score:** Weighted Average of Z-Scores of Sharpe Ratios (1m, 3m, 6m, 9m, 12m)
-- **Weights:** 10% (1m), 30% (3m), 30% (6m), 20% (9m), 10% (12m)
-- **Filters:**
-    - Price > 50 EMA
-    - Price >= 0.8 * 52-Week High
-""")
+@st.cache_data(show_spinner=False)
+def calculate_rankings_cached(prices):
+    analyzer = MomentumAnalyzer(prices)
+    return analyzer.get_rankings()
 
-# Sidebar
-st.sidebar.header("Configuration")
+# Main App
+def main():
+    st.title("🇮🇳 Nifty Momentum Ranking System")
+    st.markdown("""
+    This application ranks Indian stocks based on a **Volatility-Adjusted Momentum** strategy.
 
-use_full_universe = st.sidebar.checkbox("Use Full Universe (Nifty Total Market)", value=True)
-subset_size = None if use_full_universe else 20
+    **Strategy:**
+    - Weighted Z-Scores of Sharpe Ratios (1m, 3m, 6m, 9m, 12m).
+    - **Filters:** Price > 50 EMA and Price within 20% of 52-Week High.
+    """)
 
-if 'results' not in st.session_state:
-    st.session_state.results = None
+    # Sidebar
+    st.sidebar.header("Configuration")
 
-if st.sidebar.button("Run Analysis"):
-    with st.spinner("Fetching data and calculating momentum scores... This may take a few minutes for the full universe."):
+    available_indices = list(INDICES_URLS.keys())
+    selected_indices = st.sidebar.multiselect(
+        "Select Indices to Include:",
+        options=available_indices,
+        default=["NIFTY 50"]
+    )
+
+    if st.sidebar.button("Run Analysis", type="primary"):
+        if not selected_indices:
+            st.error("Please select at least one index.")
+            return
+
+        status_text = st.empty()
+        progress_bar = st.progress(0)
+
         try:
-            df = momentum.generate_full_ranking(subset_size=subset_size)
+            # 1. Fetch Constituents
+            status_text.text("Fetching Index Constituents...")
+            tickers = get_tickers_cached(selected_indices)
+            progress_bar.progress(25)
 
-            if df.empty:
-                st.error("No data found or calculation failed. Please check logs.")
-                st.session_state.results = None
+            if not tickers:
+                st.error("No tickers found for the selected indices.")
+                status_text.empty()
+                progress_bar.empty()
+                return
+
+            st.info(f"Identified {len(tickers)} unique stocks from selected indices.")
+
+            # 2. Fetch Prices
+            status_text.text(f"Fetching Price Data for {len(tickers)} stocks... (This may take a moment)")
+            prices = get_prices_cached(tickers)
+            progress_bar.progress(75)
+
+            if prices.empty:
+                st.error("Failed to fetch price data.")
+                status_text.empty()
+                progress_bar.empty()
+                return
+
+            # 3. Calculate Momentum
+            status_text.text("Calculating Momentum Scores and Ranks...")
+            results = calculate_rankings_cached(prices)
+            progress_bar.progress(100)
+
+            status_text.empty()
+            progress_bar.empty()
+
+            if results.empty:
+                st.warning("Analysis completed but returned no results (maybe no stocks passed filters or data issues).")
             else:
-                st.session_state.results = df
-                st.success(f"Analysis complete! processed {len(df)} stocks.")
+                st.success(f"Analysis Complete! {len(results)} stocks ranked.")
+
+                # Display Options
+                st.subheader("Ranked Results")
+
+                # Column formatting configuration
+                format_mapping = {
+                    'Momentum Score': '{:.2f}',
+                    'Price': '{:.2f}',
+                    '50 EMA': '{:.2f}',
+                    '52W High': '{:.2f}',
+                    'Current Rank': '{:.0f}',
+                    'Rank 1M Ago': '{:.0f}',
+                    'Rank 2M Ago': '{:.0f}',
+                    'Rank 3M Ago': '{:.0f}'
+                }
+
+                # Filter columns to display
+                cols_to_show = [
+                    'Current Rank', 'Symbol', 'Momentum Score', 'Price',
+                    'Filters Passed', 'Above 50 EMA', 'Near 52W High',
+                    'Rank 1M Ago', 'Rank 2M Ago', 'Rank 3M Ago'
+                ]
+
+                # Ensure columns exist
+                cols_to_show = [c for c in cols_to_show if c in results.columns]
+
+                st.dataframe(
+                    results[cols_to_show].style.format(format_mapping, na_rep=""),
+                    use_container_width=True,
+                    height=600
+                )
+
+                # Download CSV
+                csv = results.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="Download Full Results CSV",
+                    data=csv,
+                    file_name="nifty_momentum_ranks.csv",
+                    mime="text/csv"
+                )
 
         except Exception as e:
-            st.error(f"An error occurred: {e}")
-            st.exception(e)
-            st.session_state.results = None
+            st.error(f"An error occurred: {str(e)}")
+            # Raise for debugging in logs
+            raise e
 
-if st.session_state.results is not None:
-    df = st.session_state.results
-
-    # Display Top 50
-    st.subheader("Top Ranked Stocks")
-
-    # Format columns
-    display_cols = [
-        'Current Rank', 'Symbol', 'Momentum Score',
-        'Price', 'Filters Passed',
-        'Above 50 EMA', 'Near 52W High',
-        'Rank 1M Ago', 'Rank 2M Ago', 'Rank 3M Ago'
-    ]
-
-    # Ensure columns exist
-    display_cols = [c for c in display_cols if c in df.columns]
-
-    st.dataframe(df[display_cols].style.format({
-        'Momentum Score': '{:.2f}',
-        'Price': '{:.2f}',
-        'Current Rank': '{:.0f}',
-        'Rank 1M Ago': '{:.0f}',
-        'Rank 2M Ago': '{:.0f}',
-        'Rank 3M Ago': '{:.0f}'
-    }))
-
-    # Download Button
-    csv = df.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        "Download Full Results as CSV",
-        csv,
-        "nifty_momentum_ranking.csv",
-        "text/csv",
-        key='download-csv'
-    )
+if __name__ == "__main__":
+    main()
