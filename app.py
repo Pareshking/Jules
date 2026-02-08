@@ -40,9 +40,12 @@ def main():
     # Sidebar
     st.sidebar.header("Configuration")
 
+    st.sidebar.markdown("### Market Cap / Indices")
+    st.sidebar.markdown("Select one or a combination of indices to scan.")
+
     available_indices = list(INDICES_URLS.keys())
     selected_indices = st.sidebar.multiselect(
-        "Select Indices to Include:",
+        "Select Indices:",
         options=available_indices,
         default=["NIFTY 50"]
     )
@@ -103,6 +106,7 @@ def main():
                     '50 EMA': '{:.2f}',
                     '52W High': '{:.2f}',
                     'Current Rank': '{:.0f}',
+                    'Rank Velocity': '{:+.0f}',
                     'Rank 1M Ago': '{:.0f}',
                     'Rank 2M Ago': '{:.0f}',
                     'Rank 3M Ago': '{:.0f}'
@@ -110,7 +114,7 @@ def main():
 
                 # Filter columns to display
                 cols_to_show = [
-                    'Current Rank', 'Symbol', 'Momentum Score', 'Price',
+                    'Current Rank', 'Rank Velocity', 'Symbol', 'Momentum Score', 'Price',
                     'Filters Passed', 'Above 50 EMA', 'Near 52W High',
                     'Rank 1M Ago', 'Rank 2M Ago', 'Rank 3M Ago'
                 ]

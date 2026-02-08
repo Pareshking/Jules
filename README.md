@@ -1,40 +1,40 @@
 ---
-title: Nifty Momentum Ranking
+title: Nifty Momentum
 emoji: 📈
 colorFrom: blue
-colorTo: green
+colorTo: indigo
 sdk: docker
-app_port: 7860
+app_file: app.py
 pinned: false
 ---
 
-# Nifty Momentum Ranking System
+# Nifty Momentum Ranking System 🇮🇳
 
-This application implements a quantitative momentum investing strategy for the Indian Stock Market (Nifty Indices).
+This application ranks Indian stocks based on a **Volatility-Adjusted Momentum** strategy, designed for the Indian equity market (NSE).
 
-## Methodology
+## Strategy Overview
 
-The ranking is based on a **Volatility-Adjusted Momentum** score calculated as the weighted average of Z-Scores of Sharpe Ratios across multiple timeframes:
-- **1 Month** (10% weight)
-- **3 Months** (30% weight)
-- **6 Months** (30% weight)
-- **9 Months** (20% weight)
-- **12 Months** (10% weight)
+The core logic evaluates momentum using a weighted average of Z-Scores of Sharpe Ratios over multiple timeframes.
 
-**Hard Filters:**
-- Price must be above the **50-day EMA**.
-- Price must be within **20% of the 52-Week High**.
+*   **Timeframes:** 1m, 3m, 6m, 9m, 12m
+*   **Weights:** 10%, 30%, 30%, 20%, 10%
+*   **Rank Velocity:** Tracks the change in rank compared to 1 month ago.
 
 ## Features
 
-- **Custom Universe Selection**: Choose from NIFTY 50, NEXT 50, MIDCAP 150, SMALLCAP 250, MICROCAP 250, or the entire TOTAL MARKET.
-- **Live Data**: Fetches real-time market data using `yfinance`.
-- **Downloadable Results**: Export the full ranked list to CSV.
+*   **Customizable Universe:** Select from NIFTY 50, NIFTY NEXT 50, MIDCAP 150, SMALLCAP 250, MICROCAP 250, and TOTAL MARKET.
+*   **Filtering:** Hard filters for stocks below 50 EMA or far from 52-Week Highs.
+*   **Data Source:** Fetches real-time/delayed data using `yfinance` and official NSE constituent lists.
+*   **Export:** Download full rankings as CSV.
 
-## Project Structure
+## Deployment
 
-- `app.py`: Streamlit application entry point.
-- `core/`: Modular logic for data fetching and momentum calculation.
-    - `fetcher.py`: Handles fetching constituents and price data.
-    - `momentum.py`: Contains the `MomentumAnalyzer` class logic.
-    - `config.py`: Configuration for indices URLs and strategy parameters.
+This app is designed to run on **Hugging Face Spaces**.
+
+### Configuration (Optional)
+
+You can override default configuration by setting Environment Variables in the Space settings:
+
+*   `NIFTY_50_URL`, `NIFTY_NEXT_50_URL`, etc.: Override CSV URLs for indices.
+*   `MOMENTUM_WINDOWS`: JSON string for lookback periods (e.g., `[21, 63, 126]`).
+*   `MOMENTUM_WEIGHTS`: JSON string for weights (e.g., `[0.2, 0.4, 0.4]`).
