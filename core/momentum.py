@@ -3,6 +3,13 @@ import numpy as np
 from .config import MOMENTUM_WINDOWS, MOMENTUM_WEIGHTS
 
 class MomentumAnalyzer:
+    """
+    Analyzes price data to calculate momentum scores and rankings.
+
+    The 'Momentum Score' calculated here acts as a Relative Strength metric,
+    comparing stocks against each other based on their volatility-adjusted returns
+    over multiple timeframes.
+    """
     def __init__(self, prices: pd.DataFrame):
         self.prices = prices
         self.momentum_scores = None
@@ -109,6 +116,10 @@ class MomentumAnalyzer:
         df['Rank 1M Ago'] = get_rank_series(indices['1M Ago'])
         df['Rank 2M Ago'] = get_rank_series(indices['2M Ago'])
         df['Rank 3M Ago'] = get_rank_series(indices['3M Ago'])
+
+        # Rank Velocity (1M Ago - Current Rank)
+        # Positive means improvement (e.g. was 50, now 10 -> 50 - 10 = +40)
+        df['Rank Velocity'] = df['Rank 1M Ago'] - df['Current Rank']
 
         # Apply Filters
         df['Above 50 EMA'] = df['Price'] > df['50 EMA']
