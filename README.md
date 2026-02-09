@@ -21,6 +21,10 @@ The ranking is based on a **Volatility-Adjusted Momentum** score calculated as t
 - **9 Months** (20% weight)
 - **12 Months** (10% weight)
 
+**Rank Velocity:**
+- Calculates the change in rank over the last 1 month (Past Rank - Current Rank).
+- Positive values indicate momentum is improving relative to peers.
+
 **Hard Filters:**
 - Price must be above the **50-day EMA**.
 - Price must be within **20% of the 52-Week High**.

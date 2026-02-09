@@ -36,6 +36,7 @@ def test_momentum_logic(tickers):
     assert 'Momentum Score' in df.columns
     assert 'Current Rank' in df.columns
     assert 'Filters Passed' in df.columns
+    assert 'Rank Velocity' in df.columns # New Check
     print("Momentum Logic Passed.")
 
 if __name__ == "__main__":

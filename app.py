@@ -35,6 +35,7 @@ def main():
     **Strategy:**
     - Weighted Z-Scores of Sharpe Ratios (1m, 3m, 6m, 9m, 12m).
     - **Filters:** Price > 50 EMA and Price within 20% of 52-Week High.
+    - **Rank Velocity:** Improvement in rank over the last 1 month.
     """)
 
     # Sidebar
@@ -105,12 +106,13 @@ def main():
                     'Current Rank': '{:.0f}',
                     'Rank 1M Ago': '{:.0f}',
                     'Rank 2M Ago': '{:.0f}',
-                    'Rank 3M Ago': '{:.0f}'
+                    'Rank 3M Ago': '{:.0f}',
+                    'Rank Velocity': '{:+.0f}'
                 }
 
                 # Filter columns to display
                 cols_to_show = [
-                    'Current Rank', 'Symbol', 'Momentum Score', 'Price',
+                    'Current Rank', 'Symbol', 'Momentum Score', 'Rank Velocity', 'Price',
                     'Filters Passed', 'Above 50 EMA', 'Near 52W High',
                     'Rank 1M Ago', 'Rank 2M Ago', 'Rank 3M Ago'
                 ]
@@ -118,8 +120,19 @@ def main():
                 # Ensure columns exist
                 cols_to_show = [c for c in cols_to_show if c in results.columns]
 
+                # Style logic for Rank Velocity (Green for positive, Red for negative)
+                def color_velocity(val):
+                    if pd.isna(val):
+                        return ''
+                    color = 'green' if val > 0 else 'red' if val < 0 else 'grey'
+                    return f'color: {color}'
+
+                styled_df = results[cols_to_show].style.format(format_mapping, na_rep="").map(
+                    color_velocity, subset=['Rank Velocity'] if 'Rank Velocity' in results.columns else None
+                )
+
                 st.dataframe(
-                    results[cols_to_show].style.format(format_mapping, na_rep=""),
+                    styled_df,
                     use_container_width=True,
                     height=600
                 )
