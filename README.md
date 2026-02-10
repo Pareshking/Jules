@@ -25,9 +25,14 @@ The ranking is based on a **Volatility-Adjusted Momentum** score calculated as t
 - Price must be above the **50-day EMA**.
 - Price must be within **20% of the 52-Week High**.
 
+**Rank Velocity:**
+- Measures the change in rank compared to 1 month ago.
+- Positive value indicates an improvement in rank.
+
 ## Features
 
 - **Custom Universe Selection**: Choose from NIFTY 50, NEXT 50, MIDCAP 150, SMALLCAP 250, MICROCAP 250, or the entire TOTAL MARKET.
+- **Rank Velocity**: Visualize the momentum trend with color-coded velocity metrics.
 - **Live Data**: Fetches real-time market data using `yfinance`.
 - **Downloadable Results**: Export the full ranked list to CSV.
 
@@ -36,5 +41,5 @@ The ranking is based on a **Volatility-Adjusted Momentum** score calculated as t
 - `app.py`: Streamlit application entry point.
 - `core/`: Modular logic for data fetching and momentum calculation.
     - `fetcher.py`: Handles fetching constituents and price data.
-    - `momentum.py`: Contains the `MomentumAnalyzer` class logic.
+    - `momentum.py`: Contains the `MomentumAnalyzer` class logic (including Rank Velocity).
     - `config.py`: Configuration for indices URLs and strategy parameters.
