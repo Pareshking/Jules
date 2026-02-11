@@ -79,16 +79,16 @@ def fetch_price_data(tickers: List[str], period: str = "3y") -> pd.DataFrame:
         return pd.DataFrame()
 
     # Extract Close prices
-    # If multiple tickers, 'Close' is a DataFrame. If single, Series.
-    # yfinance output structure changed recently, 'Close' might be top level or under Price type
-
-    # Check if MultiIndex columns (Price, Ticker)
+    # Handle yfinance MultiIndex (Price, Ticker) or Single Level
     if isinstance(data.columns, pd.MultiIndex):
-        try:
+        # If 'Close' is in the first level (Price)
+        if 'Close' in data.columns.get_level_values(0):
             close_data = data['Close']
-        except KeyError:
-            # Maybe it is just data if flattened?
-             close_data = data
+        # If 'Close' is in the second level (Ticker, Price) - less common default
+        elif 'Close' in data.columns.get_level_values(1):
+            close_data = data.xs('Close', axis=1, level=1)
+        else:
+            close_data = data
     elif 'Close' in data.columns:
         close_data = data['Close']
     else:
@@ -97,8 +97,11 @@ def fetch_price_data(tickers: List[str], period: str = "3y") -> pd.DataFrame:
     # Ensure it's a DataFrame (dates x tickers)
     if isinstance(close_data, pd.Series):
         close_data = close_data.to_frame()
-        # If it's a series, the column name might be 'Close', rename to ticker
-        if len(tickers) == 1:
+
+    # If we requested a single ticker, the column might be named 'Close'
+    # We want it named as the ticker symbol
+    if len(tickers) == 1 and len(close_data.columns) == 1:
+        if close_data.columns[0] == 'Close':
             close_data.columns = tickers
 
     return close_data
