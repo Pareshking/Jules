@@ -1,5 +1,8 @@
 FROM python:3.10-slim
 
+# Create a user with UID 1000
+RUN useradd -m -u 1000 user
+
 WORKDIR /app
 
 # Install system dependencies if any (none strictly needed for these python libs usually)
@@ -15,6 +18,12 @@ COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 COPY . .
+
+# Set ownership of the app directory to the user
+RUN chown -R user:user /app
+
+# Switch to the non-root user
+USER user
 
 EXPOSE 7860
 

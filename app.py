@@ -105,12 +105,14 @@ def main():
                     'Current Rank': '{:.0f}',
                     'Rank 1M Ago': '{:.0f}',
                     'Rank 2M Ago': '{:.0f}',
-                    'Rank 3M Ago': '{:.0f}'
+                    'Rank 3M Ago': '{:.0f}',
+                    'Rank Velocity': '{:+.0f}'
                 }
 
                 # Filter columns to display
                 cols_to_show = [
                     'Current Rank', 'Symbol', 'Momentum Score', 'Price',
+                    'Rank Velocity',
                     'Filters Passed', 'Above 50 EMA', 'Near 52W High',
                     'Rank 1M Ago', 'Rank 2M Ago', 'Rank 3M Ago'
                 ]
@@ -118,8 +120,23 @@ def main():
                 # Ensure columns exist
                 cols_to_show = [c for c in cols_to_show if c in results.columns]
 
+                # Style function for Rank Velocity
+                def style_velocity(v):
+                    if pd.isna(v): return ""
+                    if v > 0: return "color: green; font-weight: bold;"
+                    if v < 0: return "color: red; font-weight: bold;"
+                    return "color: gray;"
+
+                # Apply styling
+                styler = results[cols_to_show].style.format(format_mapping, na_rep="")
+
+                if hasattr(styler, "map"):
+                    styler = styler.map(style_velocity, subset=['Rank Velocity'])
+                else:
+                    styler = styler.applymap(style_velocity, subset=['Rank Velocity'])
+
                 st.dataframe(
-                    results[cols_to_show].style.format(format_mapping, na_rep=""),
+                    styler,
                     use_container_width=True,
                     height=600
                 )
