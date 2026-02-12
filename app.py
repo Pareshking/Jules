@@ -105,12 +105,14 @@ def main():
                     'Current Rank': '{:.0f}',
                     'Rank 1M Ago': '{:.0f}',
                     'Rank 2M Ago': '{:.0f}',
-                    'Rank 3M Ago': '{:.0f}'
+                    'Rank 3M Ago': '{:.0f}',
+                    'Rank Velocity': '{:+.0f}'
                 }
 
                 # Filter columns to display
                 cols_to_show = [
                     'Current Rank', 'Symbol', 'Momentum Score', 'Price',
+                    'Rank Velocity',
                     'Filters Passed', 'Above 50 EMA', 'Near 52W High',
                     'Rank 1M Ago', 'Rank 2M Ago', 'Rank 3M Ago'
                 ]
@@ -118,8 +120,30 @@ def main():
                 # Ensure columns exist
                 cols_to_show = [c for c in cols_to_show if c in results.columns]
 
+                # Conditional Formatting for Rank Velocity
+                def color_velocity(val):
+                    if pd.isna(val):
+                        return ''
+                    color = 'green' if val > 0 else 'red' if val < 0 else 'black'
+                    return f'color: {color}'
+
+                # Apply styling
+                styled_df = results[cols_to_show].style.format(format_mapping, na_rep="")
+
+                if 'Rank Velocity' in cols_to_show:
+                    # using map (pandas >= 1.3.0) or applymap (older)
+                    # safe approach: try map, fallback to applymap if needed,
+                    # but since we are installing fresh pandas, map should exist or applymap will work.
+                    # Actually, 'map' for Styler is new in 1.4.0. Before it was applymap.
+                    # Let's use applymap for subset which is deprecated in 2.1.0 but works in between.
+                    # Or better, just use applymap which is widely supported for elementwise.
+                    try:
+                        styled_df = styled_df.map(color_velocity, subset=['Rank Velocity'])
+                    except AttributeError:
+                        styled_df = styled_df.applymap(color_velocity, subset=['Rank Velocity'])
+
                 st.dataframe(
-                    results[cols_to_show].style.format(format_mapping, na_rep=""),
+                    styled_df,
                     use_container_width=True,
                     height=600
                 )
