@@ -9,6 +9,7 @@ def get_constituents(indices_names: List[str]) -> List[str]:
     """
     Fetches constituents for the selected indices from the NSE website.
     Returns a list of unique symbols with '.NS' appended.
+    Filters out 'DUMMY' symbols.
     """
     all_symbols = set()
     headers = {
@@ -47,7 +48,9 @@ def get_constituents(indices_names: List[str]) -> List[str]:
 
             if symbol_col:
                 symbols = df[symbol_col].dropna().astype(str).tolist()
-                all_symbols.update([s.strip() for s in symbols])
+                # Filter DUMMY symbols
+                valid_symbols = [s.strip() for s in symbols if not s.strip().startswith('DUMMY')]
+                all_symbols.update(valid_symbols)
             else:
                 print(f"Warning: Could not identify Symbol column for {index_name}")
 
@@ -85,13 +88,23 @@ def fetch_price_data(tickers: List[str], period: str = "3y") -> pd.DataFrame:
     # Check if MultiIndex columns (Price, Ticker)
     if isinstance(data.columns, pd.MultiIndex):
         try:
-            close_data = data['Close']
+            # Try to get Close. If it exists as a level 0 index.
+            # In recent yfinance, columns are (Price, Ticker).
+            # So data['Close'] should return DataFrame with Ticker as columns.
+            close_data = data.xs('Close', axis=1, level=0, drop_level=True)
         except KeyError:
-            # Maybe it is just data if flattened?
-             close_data = data
+            # Fallback or different structure
+             try:
+                 close_data = data['Close']
+             except KeyError:
+                 close_data = data
     elif 'Close' in data.columns:
         close_data = data['Close']
     else:
+        # If columns are just tickers (rare if multiple types fetched, but yf.download usually fetches all OHLCV)
+        # But maybe auto_adjust=True changes something.
+        # If we can't find Close, we might be in trouble.
+        # Assuming data is the Close data if no Close column (unlikely with default download)
         close_data = data
 
     # Ensure it's a DataFrame (dates x tickers)
@@ -100,5 +113,12 @@ def fetch_price_data(tickers: List[str], period: str = "3y") -> pd.DataFrame:
         # If it's a series, the column name might be 'Close', rename to ticker
         if len(tickers) == 1:
             close_data.columns = tickers
+
+    # Clean up columns just in case
+    # Sometimes yfinance returns Tickers as columns, sometimes it might be messed up.
+    # We expect columns to be Tickers.
+
+    # Drop columns that are all NaN (failed downloads)
+    close_data = close_data.dropna(axis=1, how='all')
 
     return close_data
