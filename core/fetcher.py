@@ -28,10 +28,10 @@ def get_constituents(indices_names: List[str]) -> List[str]:
             csv_content = response.content.decode('utf-8')
 
             # Read CSV
-            df = pd.read_csv(io.StringIO(csv_content), sep=",")
+            df = pd.read_csv(io.StringIO(csv_content), sep=",", on_bad_lines='skip')
 
             # Normalize column names
-            df.columns = [c.strip() for c in df.columns]
+            df.columns = [str(c).strip() for c in df.columns]
 
             # Identify Symbol column
             symbol_col = None
@@ -47,7 +47,17 @@ def get_constituents(indices_names: List[str]) -> List[str]:
 
             if symbol_col:
                 symbols = df[symbol_col].dropna().astype(str).tolist()
-                all_symbols.update([s.strip() for s in symbols])
+
+                # Filter bad symbols
+                clean_symbols = []
+                for s in symbols:
+                    s = s.strip()
+                    # Filter out header repetitions or dummy placeholders
+                    if s.upper() == 'SYMBOL' or s.startswith('DUMMY') or not s:
+                        continue
+                    clean_symbols.append(s)
+
+                all_symbols.update(clean_symbols)
             else:
                 print(f"Warning: Could not identify Symbol column for {index_name}")
 
@@ -69,7 +79,6 @@ def fetch_price_data(tickers: List[str], period: str = "3y") -> pd.DataFrame:
     print(f"Fetching data for {len(tickers)} tickers...")
     try:
         # auto_adjust=True ensures Close is adjusted for splits and dividends
-        # threads=True is default but good to be explicit
         data = yf.download(tickers, period=period, auto_adjust=True, progress=False, threads=True)
     except Exception as e:
         print(f"Error fetching data via yfinance: {e}")
@@ -79,26 +88,31 @@ def fetch_price_data(tickers: List[str], period: str = "3y") -> pd.DataFrame:
         return pd.DataFrame()
 
     # Extract Close prices
-    # If multiple tickers, 'Close' is a DataFrame. If single, Series.
-    # yfinance output structure changed recently, 'Close' might be top level or under Price type
+    close_data = None
 
-    # Check if MultiIndex columns (Price, Ticker)
-    if isinstance(data.columns, pd.MultiIndex):
-        try:
+    try:
+        # 1. Try standard access (Works for Flat DF and MultiIndex level 0)
+        if 'Close' in data.columns:
             close_data = data['Close']
-        except KeyError:
-            # Maybe it is just data if flattened?
-             close_data = data
-    elif 'Close' in data.columns:
-        close_data = data['Close']
-    else:
-        close_data = data
+        # 2. Try checking level 1 if MultiIndex
+        elif isinstance(data.columns, pd.MultiIndex) and 'Close' in data.columns.get_level_values(1):
+             close_data = data.xs('Close', axis=1, level=1)
+    except Exception:
+        pass
+
+    if close_data is None or close_data.empty:
+         return pd.DataFrame()
 
     # Ensure it's a DataFrame (dates x tickers)
     if isinstance(close_data, pd.Series):
         close_data = close_data.to_frame()
-        # If it's a series, the column name might be 'Close', rename to ticker
+        # If single ticker, ensure column name is the ticker
         if len(tickers) == 1:
             close_data.columns = tickers
+
+    # Ensure columns are simple strings (Tickers)
+    # If close_data is a DataFrame derived from MultiIndex, columns might still be complex?
+    # Usually data['Close'] on MultiIndex returns Index(['AAPL', 'MSFT'], dtype='object', name='Ticker')
+    # So close_data.columns should be flat.
 
     return close_data

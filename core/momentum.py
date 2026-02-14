@@ -16,7 +16,9 @@ class MomentumAnalyzer:
             return None
 
         # Daily Returns
-        daily_returns = self.prices.pct_change(fill_method=None)
+        # pct_change default fill_method is None in newer pandas versions or forward fill in older
+        # We want simple returns
+        daily_returns = self.prices.pct_change()
 
         # Initialize Score DataFrame
         weighted_z_score = pd.DataFrame(0.0, index=self.prices.index, columns=self.prices.columns)
@@ -109,6 +111,10 @@ class MomentumAnalyzer:
         df['Rank 1M Ago'] = get_rank_series(indices['1M Ago'])
         df['Rank 2M Ago'] = get_rank_series(indices['2M Ago'])
         df['Rank 3M Ago'] = get_rank_series(indices['3M Ago'])
+
+        # Calculate Rank Velocity (Change in Rank over last month)
+        # Positive velocity = Rank improved (e.g. Rank 10 -> Rank 5, Velocity = 5)
+        df['Rank Velocity'] = df['Rank 1M Ago'] - df['Current Rank']
 
         # Apply Filters
         df['Above 50 EMA'] = df['Price'] > df['50 EMA']
