@@ -32,9 +32,10 @@ def main():
     st.markdown("""
     This application ranks Indian stocks based on a **Volatility-Adjusted Momentum** strategy.
 
-    **Strategy:**
-    - Weighted Z-Scores of Sharpe Ratios (1m, 3m, 6m, 9m, 12m).
+    **Methodology:**
+    - **Momentum Score:** Weighted Average of Z-Scores of Sharpe Ratios (1m, 3m, 6m, 9m, 12m).
     - **Filters:** Price > 50 EMA and Price within 20% of 52-Week High.
+    - **Rank Velocity:** Improvement in rank over the last 1 month (Positive is good).
     """)
 
     # Sidebar
@@ -103,6 +104,7 @@ def main():
                     '50 EMA': '{:.2f}',
                     '52W High': '{:.2f}',
                     'Current Rank': '{:.0f}',
+                    'Rank Velocity': '{:.0f}',
                     'Rank 1M Ago': '{:.0f}',
                     'Rank 2M Ago': '{:.0f}',
                     'Rank 3M Ago': '{:.0f}'
@@ -110,7 +112,7 @@ def main():
 
                 # Filter columns to display
                 cols_to_show = [
-                    'Current Rank', 'Symbol', 'Momentum Score', 'Price',
+                    'Current Rank', 'Symbol', 'Momentum Score', 'Rank Velocity', 'Price',
                     'Filters Passed', 'Above 50 EMA', 'Near 52W High',
                     'Rank 1M Ago', 'Rank 2M Ago', 'Rank 3M Ago'
                 ]
@@ -118,10 +120,26 @@ def main():
                 # Ensure columns exist
                 cols_to_show = [c for c in cols_to_show if c in results.columns]
 
+                # Apply conditional formatting
+                def highlight_velocity(val):
+                    if pd.isna(val):
+                        return ''
+                    color = 'green' if val > 0 else 'red' if val < 0 else 'gray'
+                    return f'color: {color}'
+
+                # applymap is deprecated in newer pandas, use map
+                try:
+                    styled_df = results[cols_to_show].style.format(format_mapping, na_rep="")\
+                        .map(highlight_velocity, subset=['Rank Velocity'])
+                except AttributeError:
+                     # Fallback for older pandas
+                     styled_df = results[cols_to_show].style.format(format_mapping, na_rep="")\
+                        .applymap(highlight_velocity, subset=['Rank Velocity'])
+
                 st.dataframe(
-                    results[cols_to_show].style.format(format_mapping, na_rep=""),
+                    styled_df,
                     use_container_width=True,
-                    height=600
+                    height=800
                 )
 
                 # Download CSV
