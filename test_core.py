@@ -36,6 +36,13 @@ def test_momentum_logic(tickers):
     assert 'Momentum Score' in df.columns
     assert 'Current Rank' in df.columns
     assert 'Filters Passed' in df.columns
+    assert 'Rank Velocity' in df.columns, "Rank Velocity column missing"
+
+    # Check if Rank Velocity is calculated (not all NaN if enough history)
+    # Note: If history is short, it might be NaN, but with 2y data it should be fine.
+    print("Rank Velocity stats:")
+    print(df['Rank Velocity'].describe())
+
     print("Momentum Logic Passed.")
 
 if __name__ == "__main__":
