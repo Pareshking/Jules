@@ -2,7 +2,7 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install system dependencies if any (none strictly needed for these python libs usually)
+# Install system dependencies if any
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
@@ -14,7 +14,19 @@ COPY requirements.txt .
 
 RUN pip3 install --no-cache-dir -r requirements.txt
 
+# Create a non-root user with UID 1000
+RUN useradd -m -u 1000 user
+
 COPY . .
+
+# Change ownership of the application directory to the non-root user
+RUN chown -R user:user /app
+
+# Switch to the non-root user
+USER user
+
+# Add local bin to PATH (though dependencies are installed globally, this is good practice)
+ENV PATH="/home/user/.local/bin:$PATH"
 
 EXPOSE 7860
 
