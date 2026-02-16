@@ -2,19 +2,23 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install system dependencies if any (none strictly needed for these python libs usually)
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
-    software-properties-common \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+# Set up user to avoid running as root
+RUN useradd -m -u 1000 user
+USER user
+ENV PATH="/home/user/.local/bin:$PATH"
 
-RUN pip3 install --no-cache-dir -r requirements.txt
+COPY --chown=user:user requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY --chown=user:user . .
 
 EXPOSE 7860
 
