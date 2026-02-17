@@ -4,6 +4,8 @@ import requests
 import io
 from typing import List
 from .config import INDICES_URLS
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 def get_constituents(indices_names: List[str]) -> List[str]:
     """
@@ -15,6 +17,11 @@ def get_constituents(indices_names: List[str]) -> List[str]:
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
 
+    # Setup session with retry
+    session = requests.Session()
+    retries = Retry(total=3, backoff_factor=0.3, status_forcelist=[500, 502, 503, 504])
+    session.mount('https://', HTTPAdapter(max_retries=retries))
+
     for index_name in indices_names:
         url = INDICES_URLS.get(index_name)
         if not url:
@@ -23,7 +30,7 @@ def get_constituents(indices_names: List[str]) -> List[str]:
 
         print(f"Fetching {index_name} from {url}...")
         try:
-            response = requests.get(url, headers=headers, timeout=10)
+            response = session.get(url, headers=headers, timeout=10)
             response.raise_for_status()
             csv_content = response.content.decode('utf-8')
 
@@ -46,8 +53,11 @@ def get_constituents(indices_names: List[str]) -> List[str]:
                     symbol_col = df.columns[2]
 
             if symbol_col:
+                # Filter out 'DUMMY' or invalid symbols if any
                 symbols = df[symbol_col].dropna().astype(str).tolist()
-                all_symbols.update([s.strip() for s in symbols])
+                # NSE indices sometimes have header rows or disclaimer rows at the bottom
+                valid_symbols = [s.strip() for s in symbols if s.strip().upper() != 'SYMBOL' and not s.strip().startswith('DUMMY')]
+                all_symbols.update(valid_symbols)
             else:
                 print(f"Warning: Could not identify Symbol column for {index_name}")
 
@@ -88,7 +98,7 @@ def fetch_price_data(tickers: List[str], period: str = "3y") -> pd.DataFrame:
             close_data = data['Close']
         except KeyError:
             # Maybe it is just data if flattened?
-             close_data = data
+            close_data = data
     elif 'Close' in data.columns:
         close_data = data['Close']
     else:
