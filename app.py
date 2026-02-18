@@ -105,21 +105,35 @@ def main():
                     'Current Rank': '{:.0f}',
                     'Rank 1M Ago': '{:.0f}',
                     'Rank 2M Ago': '{:.0f}',
-                    'Rank 3M Ago': '{:.0f}'
+                    'Rank 3M Ago': '{:.0f}',
+                    'Rank Velocity': '{:+.0f}'
                 }
 
                 # Filter columns to display
                 cols_to_show = [
                     'Current Rank', 'Symbol', 'Momentum Score', 'Price',
-                    'Filters Passed', 'Above 50 EMA', 'Near 52W High',
+                    'Filters Passed', 'Rank Velocity', 'Above 50 EMA', 'Near 52W High',
                     'Rank 1M Ago', 'Rank 2M Ago', 'Rank 3M Ago'
                 ]
 
                 # Ensure columns exist
                 cols_to_show = [c for c in cols_to_show if c in results.columns]
 
+                # Apply conditional formatting to Rank Velocity
+                # Green for positive, Red for negative
+                def color_velocity(val):
+                    if pd.isna(val):
+                        return ""
+                    color = 'green' if val > 0 else 'red' if val < 0 else 'grey'
+                    return f'color: {color}'
+
+                styler = results[cols_to_show].style.format(format_mapping, na_rep="")
+
+                if 'Rank Velocity' in cols_to_show:
+                    styler = styler.map(color_velocity, subset=['Rank Velocity'])
+
                 st.dataframe(
-                    results[cols_to_show].style.format(format_mapping, na_rep=""),
+                    styler,
                     use_container_width=True,
                     height=600
                 )
