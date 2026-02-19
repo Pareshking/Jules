@@ -26,6 +26,46 @@ def calculate_rankings_cached(prices):
     analyzer = MomentumAnalyzer(prices)
     return analyzer.get_rankings()
 
+def style_dataframe(df):
+    """
+    Apply styling to the dataframe.
+    """
+    format_mapping = {
+        'Momentum Score': '{:.2f}',
+        'Price': '{:.2f}',
+        '50 EMA': '{:.2f}',
+        '52W High': '{:.2f}',
+        'Current Rank': '{:.0f}',
+        'Rank Velocity': '{:.0f}',
+        'Rank 1M Ago': '{:.0f}',
+        'Rank 2M Ago': '{:.0f}',
+        'Rank 3M Ago': '{:.0f}'
+    }
+
+    # Filter columns
+    cols_to_show = [
+        'Current Rank', 'Symbol', 'Momentum Score', 'Rank Velocity', 'Price',
+        'Filters Passed', 'Above 50 EMA', 'Near 52W High',
+        'Rank 1M Ago', 'Rank 2M Ago', 'Rank 3M Ago'
+    ]
+
+    # Ensure columns exist
+    cols_to_show = [c for c in cols_to_show if c in df.columns]
+
+    styler = df[cols_to_show].style.format(format_mapping, na_rep="")
+
+    # Apply conditional formatting to Rank Velocity
+    def color_velocity(val):
+        if pd.isna(val):
+            return ''
+        color = 'green' if val > 0 else 'red' if val < 0 else 'black'
+        return f'color: {color}'
+
+    if 'Rank Velocity' in cols_to_show:
+        styler = styler.map(color_velocity, subset=['Rank Velocity'])
+
+    return styler
+
 # Main App
 def main():
     st.title("🇮🇳 Nifty Momentum Ranking System")
@@ -96,30 +136,10 @@ def main():
                 # Display Options
                 st.subheader("Ranked Results")
 
-                # Column formatting configuration
-                format_mapping = {
-                    'Momentum Score': '{:.2f}',
-                    'Price': '{:.2f}',
-                    '50 EMA': '{:.2f}',
-                    '52W High': '{:.2f}',
-                    'Current Rank': '{:.0f}',
-                    'Rank 1M Ago': '{:.0f}',
-                    'Rank 2M Ago': '{:.0f}',
-                    'Rank 3M Ago': '{:.0f}'
-                }
-
-                # Filter columns to display
-                cols_to_show = [
-                    'Current Rank', 'Symbol', 'Momentum Score', 'Price',
-                    'Filters Passed', 'Above 50 EMA', 'Near 52W High',
-                    'Rank 1M Ago', 'Rank 2M Ago', 'Rank 3M Ago'
-                ]
-
-                # Ensure columns exist
-                cols_to_show = [c for c in cols_to_show if c in results.columns]
+                styled_df = style_dataframe(results)
 
                 st.dataframe(
-                    results[cols_to_show].style.format(format_mapping, na_rep=""),
+                    styled_df,
                     use_container_width=True,
                     height=600
                 )
