@@ -26,6 +26,20 @@ def calculate_rankings_cached(prices):
     analyzer = MomentumAnalyzer(prices)
     return analyzer.get_rankings()
 
+def color_rank_velocity(val):
+    """
+    Colors elements in a dateframe
+    Green if positive, red if negative, black if zero.
+    """
+    if pd.isna(val):
+        return ''
+    if val > 0:
+        return 'color: green'
+    elif val < 0:
+        return 'color: red'
+    else:
+        return 'color: black'
+
 # Main App
 def main():
     st.title("🇮🇳 Nifty Momentum Ranking System")
@@ -40,11 +54,12 @@ def main():
     # Sidebar
     st.sidebar.header("Configuration")
 
+    # Dynamic indices from config (which might have been overridden by env vars)
     available_indices = list(INDICES_URLS.keys())
     selected_indices = st.sidebar.multiselect(
         "Select Indices to Include:",
         options=available_indices,
-        default=["NIFTY 50"]
+        default=["NIFTY 50"] if "NIFTY 50" in available_indices else available_indices[:1]
     )
 
     if st.sidebar.button("Run Analysis", type="primary"):
@@ -105,12 +120,13 @@ def main():
                     'Current Rank': '{:.0f}',
                     'Rank 1M Ago': '{:.0f}',
                     'Rank 2M Ago': '{:.0f}',
-                    'Rank 3M Ago': '{:.0f}'
+                    'Rank 3M Ago': '{:.0f}',
+                    'Rank Velocity': '{:+.0f}'
                 }
 
                 # Filter columns to display
                 cols_to_show = [
-                    'Current Rank', 'Symbol', 'Momentum Score', 'Price',
+                    'Current Rank', 'Symbol', 'Momentum Score', 'Rank Velocity', 'Price',
                     'Filters Passed', 'Above 50 EMA', 'Near 52W High',
                     'Rank 1M Ago', 'Rank 2M Ago', 'Rank 3M Ago'
                 ]
@@ -118,8 +134,15 @@ def main():
                 # Ensure columns exist
                 cols_to_show = [c for c in cols_to_show if c in results.columns]
 
+                # Apply styling
+                styled_df = results[cols_to_show].style.format(format_mapping, na_rep="")
+
+                # Apply conditional formatting to Rank Velocity
+                if 'Rank Velocity' in cols_to_show:
+                    styled_df = styled_df.map(color_rank_velocity, subset=['Rank Velocity'])
+
                 st.dataframe(
-                    results[cols_to_show].style.format(format_mapping, na_rep=""),
+                    styled_df,
                     use_container_width=True,
                     height=600
                 )
