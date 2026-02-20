@@ -3,17 +3,38 @@ import yfinance as yf
 import requests
 import io
 from typing import List
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from .config import INDICES_URLS
+
+def get_session():
+    """
+    Creates a requests Session with retry logic.
+    """
+    session = requests.Session()
+    retry = Retry(
+        total=3,
+        backoff_factor=0.3,
+        status_forcelist=[500, 502, 503, 504],
+        allowed_methods=["HEAD", "GET", "OPTIONS"]
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
 
 def get_constituents(indices_names: List[str]) -> List[str]:
     """
     Fetches constituents for the selected indices from the NSE website.
     Returns a list of unique symbols with '.NS' appended.
+    Filters out 'DUMMY' symbols.
     """
     all_symbols = set()
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
+
+    session = get_session()
 
     for index_name in indices_names:
         url = INDICES_URLS.get(index_name)
@@ -23,7 +44,7 @@ def get_constituents(indices_names: List[str]) -> List[str]:
 
         print(f"Fetching {index_name} from {url}...")
         try:
-            response = requests.get(url, headers=headers, timeout=10)
+            response = session.get(url, headers=headers, timeout=10)
             response.raise_for_status()
             csv_content = response.content.decode('utf-8')
 
@@ -47,7 +68,9 @@ def get_constituents(indices_names: List[str]) -> List[str]:
 
             if symbol_col:
                 symbols = df[symbol_col].dropna().astype(str).tolist()
-                all_symbols.update([s.strip() for s in symbols])
+                # Filter DUMMY and clean
+                clean_symbols = [s.strip() for s in symbols if not s.strip().upper().startswith('DUMMY')]
+                all_symbols.update(clean_symbols)
             else:
                 print(f"Warning: Could not identify Symbol column for {index_name}")
 
@@ -79,25 +102,33 @@ def fetch_price_data(tickers: List[str], period: str = "3y") -> pd.DataFrame:
         return pd.DataFrame()
 
     # Extract Close prices
-    # If multiple tickers, 'Close' is a DataFrame. If single, Series.
-    # yfinance output structure changed recently, 'Close' might be top level or under Price type
+    close_data = None
 
-    # Check if MultiIndex columns (Price, Ticker)
+    # Check if MultiIndex columns (Price, Ticker) or just (Ticker) or (Price)
     if isinstance(data.columns, pd.MultiIndex):
-        try:
+        # Usually (Price, Ticker)
+        if 'Close' in data.columns.get_level_values(0):
             close_data = data['Close']
-        except KeyError:
-            # Maybe it is just data if flattened?
-             close_data = data
+        # Sometimes (Ticker, Price)
+        elif 'Close' in data.columns.get_level_values(1):
+             # This is trickier, we want to select all tickers where level 1 is Close
+             close_data = data.xs('Close', axis=1, level=1)
+        else:
+            # Fallback
+            close_data = data
+
     elif 'Close' in data.columns:
-        close_data = data['Close']
+        # Single level, single ticker
+        close_data = data[['Close']]
+        if len(tickers) == 1:
+            close_data.columns = tickers
     else:
+        # Fallback
         close_data = data
 
-    # Ensure it's a DataFrame (dates x tickers)
+    # Final check
     if isinstance(close_data, pd.Series):
         close_data = close_data.to_frame()
-        # If it's a series, the column name might be 'Close', rename to ticker
         if len(tickers) == 1:
             close_data.columns = tickers
 
