@@ -1,8 +1,11 @@
 FROM python:3.10-slim
 
+# Set up a new user named "user" with user ID 1000
+RUN useradd -m -u 1000 user
+
 WORKDIR /app
 
-# Install system dependencies if any (none strictly needed for these python libs usually)
+# Install system dependencies if any
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
@@ -10,11 +13,13 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY --chown=user requirements.txt .
 
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY --chown=user . .
+
+USER user
 
 EXPOSE 7860
 
