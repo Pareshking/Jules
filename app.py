@@ -26,6 +26,44 @@ def calculate_rankings_cached(prices):
     analyzer = MomentumAnalyzer(prices)
     return analyzer.get_rankings()
 
+def apply_formatting(df):
+    """
+    Applies conditional formatting to the DataFrame.
+    """
+    # Create Styler
+    styler = df.style.format({
+        'Momentum Score': '{:.2f}',
+        'Price': '{:.2f}',
+        '50 EMA': '{:.2f}',
+        '52W High': '{:.2f}',
+        'Current Rank': '{:.0f}',
+        'Rank 1M Ago': '{:.0f}',
+        'Rank 2M Ago': '{:.0f}',
+        'Rank 3M Ago': '{:.0f}',
+        'Rank Velocity': '{:.0f}'
+    }, na_rep="")
+
+    # Color Rank Velocity
+    def color_velocity(val):
+        if pd.isna(val):
+            return ''
+        if val > 0:
+            return 'color: green'
+        elif val < 0:
+            return 'color: red'
+        else:
+            return 'color: black'
+
+    styler = styler.map(color_velocity, subset=['Rank Velocity'])
+
+    # Color Filters Passed (Green/Red)
+    def color_bool(val):
+        return 'color: green' if val else 'color: red'
+
+    styler = styler.map(color_bool, subset=['Filters Passed', 'Above 50 EMA', 'Near 52W High'])
+
+    return styler
+
 # Main App
 def main():
     st.title("🇮🇳 Nifty Momentum Ranking System")
@@ -35,12 +73,15 @@ def main():
     **Strategy:**
     - Weighted Z-Scores of Sharpe Ratios (1m, 3m, 6m, 9m, 12m).
     - **Filters:** Price > 50 EMA and Price within 20% of 52-Week High.
+    - **Rank Velocity:** (Rank 1M Ago - Current Rank). Positive is better.
     """)
 
     # Sidebar
     st.sidebar.header("Configuration")
 
     available_indices = list(INDICES_URLS.keys())
+    # Sort nicely if possible, or just default order
+
     selected_indices = st.sidebar.multiselect(
         "Select Indices to Include:",
         options=available_indices,
@@ -96,32 +137,21 @@ def main():
                 # Display Options
                 st.subheader("Ranked Results")
 
-                # Column formatting configuration
-                format_mapping = {
-                    'Momentum Score': '{:.2f}',
-                    'Price': '{:.2f}',
-                    '50 EMA': '{:.2f}',
-                    '52W High': '{:.2f}',
-                    'Current Rank': '{:.0f}',
-                    'Rank 1M Ago': '{:.0f}',
-                    'Rank 2M Ago': '{:.0f}',
-                    'Rank 3M Ago': '{:.0f}'
-                }
-
                 # Filter columns to display
                 cols_to_show = [
-                    'Current Rank', 'Symbol', 'Momentum Score', 'Price',
+                    'Current Rank', 'Symbol', 'Momentum Score', 'Rank Velocity', 'Price',
                     'Filters Passed', 'Above 50 EMA', 'Near 52W High',
-                    'Rank 1M Ago', 'Rank 2M Ago', 'Rank 3M Ago'
+                    'Rank 1M Ago'
                 ]
 
                 # Ensure columns exist
                 cols_to_show = [c for c in cols_to_show if c in results.columns]
 
+                # Show dataframe
                 st.dataframe(
-                    results[cols_to_show].style.format(format_mapping, na_rep=""),
+                    apply_formatting(results[cols_to_show]),
                     use_container_width=True,
-                    height=600
+                    height=800
                 )
 
                 # Download CSV
