@@ -1,19 +1,40 @@
 import pandas as pd
 import yfinance as yf
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import io
 from typing import List
 from .config import INDICES_URLS
+
+def get_session():
+    """
+    Creates a requests Session with retry logic.
+    """
+    session = requests.Session()
+    retry = Retry(
+        total=3,
+        backoff_factor=0.3,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["HEAD", "GET", "OPTIONS"]
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
 
 def get_constituents(indices_names: List[str]) -> List[str]:
     """
     Fetches constituents for the selected indices from the NSE website.
     Returns a list of unique symbols with '.NS' appended.
+    Filters out symbols starting with 'DUMMY'.
     """
     all_symbols = set()
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
+
+    session = get_session()
 
     for index_name in indices_names:
         url = INDICES_URLS.get(index_name)
@@ -23,7 +44,7 @@ def get_constituents(indices_names: List[str]) -> List[str]:
 
         print(f"Fetching {index_name} from {url}...")
         try:
-            response = requests.get(url, headers=headers, timeout=10)
+            response = session.get(url, headers=headers, timeout=10)
             response.raise_for_status()
             csv_content = response.content.decode('utf-8')
 
@@ -47,7 +68,9 @@ def get_constituents(indices_names: List[str]) -> List[str]:
 
             if symbol_col:
                 symbols = df[symbol_col].dropna().astype(str).tolist()
-                all_symbols.update([s.strip() for s in symbols])
+                # Filter out DUMMY symbols
+                symbols = [s.strip() for s in symbols if not s.strip().upper().startswith('DUMMY')]
+                all_symbols.update(symbols)
             else:
                 print(f"Warning: Could not identify Symbol column for {index_name}")
 

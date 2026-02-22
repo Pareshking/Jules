@@ -110,6 +110,10 @@ class MomentumAnalyzer:
         df['Rank 2M Ago'] = get_rank_series(indices['2M Ago'])
         df['Rank 3M Ago'] = get_rank_series(indices['3M Ago'])
 
+        # Rank Velocity (1 Month)
+        # Positive = Improvement (e.g. Rank 10 -> Rank 5 = 10-5 = 5)
+        df['Rank Velocity'] = df['Rank 1M Ago'] - df['Current Rank']
+
         # Apply Filters
         df['Above 50 EMA'] = df['Price'] > df['50 EMA']
         df['Near 52W High'] = df['Price'] >= (0.8 * df['52W High'])
