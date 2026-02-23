@@ -26,6 +26,24 @@ def calculate_rankings_cached(prices):
     analyzer = MomentumAnalyzer(prices)
     return analyzer.get_rankings()
 
+def make_pretty(styler):
+    styler.format('{:.2f}', subset=['Momentum Score', 'Price', '50 EMA', '52W High'], na_rep="")
+    styler.format('{:.0f}', subset=['Current Rank', 'Rank 1M Ago', 'Rank 2M Ago', 'Rank 3M Ago'], na_rep="")
+    styler.format('{:+.0f}', subset=['Rank Velocity'], na_rep="")
+
+    def color_velocity(val):
+        color = 'black'
+        if pd.isna(val):
+            return ''
+        if val > 0:
+            color = 'green'
+        elif val < 0:
+            color = 'red'
+        return f'color: {color}'
+
+    styler.map(color_velocity, subset=['Rank Velocity'])
+    return styler
+
 # Main App
 def main():
     st.title("🇮🇳 Nifty Momentum Ranking System")
@@ -96,21 +114,9 @@ def main():
                 # Display Options
                 st.subheader("Ranked Results")
 
-                # Column formatting configuration
-                format_mapping = {
-                    'Momentum Score': '{:.2f}',
-                    'Price': '{:.2f}',
-                    '50 EMA': '{:.2f}',
-                    '52W High': '{:.2f}',
-                    'Current Rank': '{:.0f}',
-                    'Rank 1M Ago': '{:.0f}',
-                    'Rank 2M Ago': '{:.0f}',
-                    'Rank 3M Ago': '{:.0f}'
-                }
-
                 # Filter columns to display
                 cols_to_show = [
-                    'Current Rank', 'Symbol', 'Momentum Score', 'Price',
+                    'Current Rank', 'Symbol', 'Momentum Score', 'Rank Velocity', 'Price',
                     'Filters Passed', 'Above 50 EMA', 'Near 52W High',
                     'Rank 1M Ago', 'Rank 2M Ago', 'Rank 3M Ago'
                 ]
@@ -119,7 +125,7 @@ def main():
                 cols_to_show = [c for c in cols_to_show if c in results.columns]
 
                 st.dataframe(
-                    results[cols_to_show].style.format(format_mapping, na_rep=""),
+                    make_pretty(results[cols_to_show].style),
                     use_container_width=True,
                     height=600
                 )

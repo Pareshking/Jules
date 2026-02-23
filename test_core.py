@@ -36,8 +36,24 @@ def test_momentum_logic(tickers):
     assert 'Momentum Score' in df.columns
     assert 'Current Rank' in df.columns
     assert 'Filters Passed' in df.columns
+    assert 'Rank Velocity' in df.columns
     print("Momentum Logic Passed.")
+
+def test_single_ticker_fetch():
+    print("Testing Single Ticker Fetch...")
+    ticker = "RELIANCE.NS"
+    prices = fetch_price_data([ticker], period="1mo")
+    print(f"Single ticker prices shape: {prices.shape}")
+    assert not prices.empty
+    # Expect 1 column
+    if prices.shape[1] != 1:
+        print(f"Columns: {prices.columns}")
+    assert prices.shape[1] == 1
+    # Check column name logic (it should be the ticker)
+    assert prices.columns[0] == ticker
+    print("Single Ticker Fetch Passed.")
 
 if __name__ == "__main__":
     tickers = test_fetch_constituents()
     test_momentum_logic(tickers)
+    test_single_ticker_fetch()

@@ -2,6 +2,8 @@ import pandas as pd
 import yfinance as yf
 import requests
 import io
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 from typing import List
 from .config import INDICES_URLS
 
@@ -15,6 +17,18 @@ def get_constituents(indices_names: List[str]) -> List[str]:
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
 
+    # Setup retry strategy
+    retry_strategy = Retry(
+        total=3,
+        backoff_factor=0.3,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["HEAD", "GET", "OPTIONS"]
+    )
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    http = requests.Session()
+    http.mount("https://", adapter)
+    http.mount("http://", adapter)
+
     for index_name in indices_names:
         url = INDICES_URLS.get(index_name)
         if not url:
@@ -23,7 +37,7 @@ def get_constituents(indices_names: List[str]) -> List[str]:
 
         print(f"Fetching {index_name} from {url}...")
         try:
-            response = requests.get(url, headers=headers, timeout=10)
+            response = http.get(url, headers=headers, timeout=10)
             response.raise_for_status()
             csv_content = response.content.decode('utf-8')
 
@@ -55,7 +69,15 @@ def get_constituents(indices_names: List[str]) -> List[str]:
             print(f"Error fetching {index_name}: {e}")
 
     # Clean and append .NS
-    cleaned_symbols = [f"{sym}.NS" for sym in all_symbols if sym]
+    cleaned_symbols = []
+    for sym in all_symbols:
+        if not sym:
+            continue
+        # Filter out dummy symbols often found in Nifty CSVs
+        if sym.upper().startswith("DUMMY"):
+            continue
+        cleaned_symbols.append(f"{sym}.NS")
+
     return sorted(list(set(cleaned_symbols)))
 
 def fetch_price_data(tickers: List[str], period: str = "3y") -> pd.DataFrame:
@@ -79,26 +101,36 @@ def fetch_price_data(tickers: List[str], period: str = "3y") -> pd.DataFrame:
         return pd.DataFrame()
 
     # Extract Close prices
-    # If multiple tickers, 'Close' is a DataFrame. If single, Series.
-    # yfinance output structure changed recently, 'Close' might be top level or under Price type
+    close_data = pd.DataFrame()
 
     # Check if MultiIndex columns (Price, Ticker)
     if isinstance(data.columns, pd.MultiIndex):
         try:
             close_data = data['Close']
         except KeyError:
-            # Maybe it is just data if flattened?
-             close_data = data
+            # Fallback if structure is unexpected
+             pass
     elif 'Close' in data.columns:
         close_data = data['Close']
-    else:
-        close_data = data
 
-    # Ensure it's a DataFrame (dates x tickers)
+    # If close_data is still empty, return empty dataframe
+    if close_data.empty:
+        # If passed single ticker, yfinance might just return OHLC without Ticker level
+        # If 'Close' was not found above, maybe it failed
+        return pd.DataFrame()
+
+    # Handle single ticker returning Series
     if isinstance(close_data, pd.Series):
         close_data = close_data.to_frame()
-        # If it's a series, the column name might be 'Close', rename to ticker
         if len(tickers) == 1:
             close_data.columns = tickers
+
+    # Ensure columns are tickers (sometimes if 1 ticker, column might be 'Close')
+    if len(tickers) == 1 and close_data.shape[1] == 1 and close_data.columns[0] == 'Close':
+        close_data.columns = tickers
+
+    # Final check for MultiIndex in close_data columns (if it's not flattened)
+    if isinstance(close_data.columns, pd.MultiIndex):
+        close_data.columns = close_data.columns.get_level_values(0)
 
     return close_data
