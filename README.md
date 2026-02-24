@@ -28,6 +28,7 @@ The ranking is based on a **Volatility-Adjusted Momentum** score calculated as t
 ## Features
 
 - **Custom Universe Selection**: Choose from NIFTY 50, NEXT 50, MIDCAP 150, SMALLCAP 250, MICROCAP 250, or the entire TOTAL MARKET.
+- **Rank Velocity**: Track changes in momentum rank (1M Ago vs Current).
 - **Live Data**: Fetches real-time market data using `yfinance`.
 - **Downloadable Results**: Export the full ranked list to CSV.
 

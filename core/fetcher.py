@@ -3,7 +3,24 @@ import yfinance as yf
 import requests
 import io
 from typing import List
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from .config import INDICES_URLS
+
+def get_session():
+    """
+    Creates a requests Session with retry logic.
+    """
+    session = requests.Session()
+    retry = Retry(
+        total=3,
+        backoff_factor=0.3,
+        status_forcelist=[500, 502, 503, 504]
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+    return session
 
 def get_constituents(indices_names: List[str]) -> List[str]:
     """
@@ -15,6 +32,8 @@ def get_constituents(indices_names: List[str]) -> List[str]:
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
 
+    session = get_session()
+
     for index_name in indices_names:
         url = INDICES_URLS.get(index_name)
         if not url:
@@ -23,7 +42,7 @@ def get_constituents(indices_names: List[str]) -> List[str]:
 
         print(f"Fetching {index_name} from {url}...")
         try:
-            response = requests.get(url, headers=headers, timeout=10)
+            response = session.get(url, headers=headers, timeout=10)
             response.raise_for_status()
             csv_content = response.content.decode('utf-8')
 
@@ -46,7 +65,9 @@ def get_constituents(indices_names: List[str]) -> List[str]:
                     symbol_col = df.columns[2]
 
             if symbol_col:
-                symbols = df[symbol_col].dropna().astype(str).tolist()
+                # Filter out rows where symbol starts with "DUMMY" as per memory
+                symbols = df[symbol_col].dropna().astype(str)
+                symbols = symbols[~symbols.str.startswith('DUMMY')]
                 all_symbols.update([s.strip() for s in symbols])
             else:
                 print(f"Warning: Could not identify Symbol column for {index_name}")
@@ -100,5 +121,9 @@ def fetch_price_data(tickers: List[str], period: str = "3y") -> pd.DataFrame:
         # If it's a series, the column name might be 'Close', rename to ticker
         if len(tickers) == 1:
             close_data.columns = tickers
+
+    # Remove timezone if present to avoid issues with arithmetic later
+    if not close_data.empty:
+        close_data.index = close_data.index.tz_localize(None)
 
     return close_data
