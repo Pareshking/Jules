@@ -1,3 +1,5 @@
+import os
+import json
 
 # URLs for Nifty Indices Constituents
 INDICES_URLS = {
@@ -9,12 +11,26 @@ INDICES_URLS = {
     "NIFTY TOTAL MARKET": "https://niftyindices.com/IndexConstituent/ind_niftytotalmarket_list.csv"
 }
 
+# Override with environment variable if present (as JSON string)
+if os.environ.get("INDICES_URLS_JSON"):
+    try:
+        INDICES_URLS = json.loads(os.environ["INDICES_URLS_JSON"])
+    except json.JSONDecodeError:
+        print("Warning: Failed to parse INDICES_URLS_JSON from environment.")
+
 # Momentum Strategy Constants
 # Windows in days (approx trading days: 1m=21, 3m=63, etc.)
 MOMENTUM_WINDOWS = [21, 63, 126, 189, 252]
 
 # Weights corresponding to the windows
 MOMENTUM_WEIGHTS = [0.1, 0.3, 0.3, 0.2, 0.1]
+
+# Override with environment variable if present (as JSON string)
+if os.environ.get("MOMENTUM_WEIGHTS_JSON"):
+    try:
+        MOMENTUM_WEIGHTS = json.loads(os.environ["MOMENTUM_WEIGHTS_JSON"])
+    except json.JSONDecodeError:
+        print("Warning: Failed to parse MOMENTUM_WEIGHTS_JSON from environment.")
 
 # Minimum history required (days)
 MIN_HISTORY_DAYS = 260
