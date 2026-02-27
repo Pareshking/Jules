@@ -26,6 +26,19 @@ def calculate_rankings_cached(prices):
     analyzer = MomentumAnalyzer(prices)
     return analyzer.get_rankings()
 
+def color_rank_velocity(val):
+    """
+    Colors Rank Velocity: Green for positive (improvement), Red for negative (decline), Black for zero.
+    """
+    if pd.isna(val):
+        return ''
+    color = 'black'
+    if val > 0:
+        color = 'green'
+    elif val < 0:
+        color = 'red'
+    return f'color: {color}'
+
 # Main App
 def main():
     st.title("🇮🇳 Nifty Momentum Ranking System")
@@ -103,6 +116,7 @@ def main():
                     '50 EMA': '{:.2f}',
                     '52W High': '{:.2f}',
                     'Current Rank': '{:.0f}',
+                    'Rank Velocity': '{:+.0f}',
                     'Rank 1M Ago': '{:.0f}',
                     'Rank 2M Ago': '{:.0f}',
                     'Rank 3M Ago': '{:.0f}'
@@ -110,7 +124,7 @@ def main():
 
                 # Filter columns to display
                 cols_to_show = [
-                    'Current Rank', 'Symbol', 'Momentum Score', 'Price',
+                    'Current Rank', 'Rank Velocity', 'Symbol', 'Momentum Score', 'Price',
                     'Filters Passed', 'Above 50 EMA', 'Near 52W High',
                     'Rank 1M Ago', 'Rank 2M Ago', 'Rank 3M Ago'
                 ]
@@ -118,8 +132,15 @@ def main():
                 # Ensure columns exist
                 cols_to_show = [c for c in cols_to_show if c in results.columns]
 
+                # Apply styling
+                styled_df = results[cols_to_show].style.format(format_mapping, na_rep="")
+
+                # Apply conditional formatting to Rank Velocity if it exists
+                if 'Rank Velocity' in cols_to_show:
+                    styled_df = styled_df.map(color_rank_velocity, subset=['Rank Velocity'])
+
                 st.dataframe(
-                    results[cols_to_show].style.format(format_mapping, na_rep=""),
+                    styled_df,
                     use_container_width=True,
                     height=600
                 )
