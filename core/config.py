@@ -1,4 +1,7 @@
 
+import os
+import json
+
 # URLs for Nifty Indices Constituents
 INDICES_URLS = {
     "NIFTY 50": "https://niftyindices.com/IndexConstituent/ind_nifty50list.csv",
@@ -18,3 +21,16 @@ MOMENTUM_WEIGHTS = [0.1, 0.3, 0.3, 0.2, 0.1]
 
 # Minimum history required (days)
 MIN_HISTORY_DAYS = 260
+
+# Override with environment variables if set
+if os.environ.get("INDICES_URLS_JSON"):
+    try:
+        INDICES_URLS = json.loads(os.environ.get("INDICES_URLS_JSON"))
+    except json.JSONDecodeError as e:
+        print(f"Failed to parse INDICES_URLS_JSON: {e}")
+
+if os.environ.get("MOMENTUM_WEIGHTS_JSON"):
+    try:
+        MOMENTUM_WEIGHTS = json.loads(os.environ.get("MOMENTUM_WEIGHTS_JSON"))
+    except json.JSONDecodeError as e:
+        print(f"Failed to parse MOMENTUM_WEIGHTS_JSON: {e}")

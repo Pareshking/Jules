@@ -13,10 +13,16 @@ def test_fetch_constituents():
     print("get_constituents Passed.")
     return tickers
 
-def test_momentum_logic(tickers):
+import pytest
+
+@pytest.fixture
+def test_tickers():
+    return ["AXISBANK.NS", "BAJAJ-AUTO.NS", "BEL.NS", "APOLLOHOSP.NS", "ADANIPORTS.NS"]
+
+def test_momentum_logic(test_tickers):
     print("Testing Momentum Logic...")
     # Use a subset to save time if list is long
-    subset = tickers[:10] if len(tickers) > 10 else tickers
+    subset = test_tickers[:10] if len(test_tickers) > 10 else test_tickers
     print(f"Fetching price data for {len(subset)} tickers...")
 
     prices = fetch_price_data(subset, period="2y") # 2y is enough for calculation (need > 1y for 12m momentum)
