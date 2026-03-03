@@ -11,10 +11,13 @@ def test_fetch_constituents():
     assert len(tickers) > 0
     assert all(t.endswith(".NS") for t in tickers)
     print("get_constituents Passed.")
-    return tickers
 
-def test_momentum_logic(tickers):
+def test_momentum_logic():
     print("Testing Momentum Logic...")
+    indices = ["NIFTY 50"]
+    tickers = get_constituents(indices)
+    assert len(tickers) > 0, "No tickers fetched for NIFTY 50"
+
     # Use a subset to save time if list is long
     subset = tickers[:10] if len(tickers) > 10 else tickers
     print(f"Fetching price data for {len(subset)} tickers...")
@@ -36,8 +39,9 @@ def test_momentum_logic(tickers):
     assert 'Momentum Score' in df.columns
     assert 'Current Rank' in df.columns
     assert 'Filters Passed' in df.columns
+    assert 'Rank Velocity' in df.columns
     print("Momentum Logic Passed.")
 
 if __name__ == "__main__":
-    tickers = test_fetch_constituents()
-    test_momentum_logic(tickers)
+    test_fetch_constituents()
+    test_momentum_logic()
