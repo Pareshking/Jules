@@ -8,7 +8,7 @@ app_port: 7860
 pinned: false
 ---
 
-# Nifty Momentum Ranking System
+# Nifty Momentum Ranking System (Hugging Face Edition)
 
 This application implements a quantitative momentum investing strategy for the Indian Stock Market (Nifty Indices).
 

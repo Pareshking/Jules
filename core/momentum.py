@@ -115,10 +115,18 @@ class MomentumAnalyzer:
         df['Near 52W High'] = df['Price'] >= (0.8 * df['52W High'])
         df['Filters Passed'] = df['Above 50 EMA'] & df['Near 52W High']
 
+        # Rank Velocity: Past Rank (1M ago) - Current Rank
+        # Positive value means current rank is smaller (better) -> Improvement
+        df['Rank Velocity'] = df['Rank 1M Ago'] - df['Current Rank']
+
         # Sort
         df = df.sort_values('Current Rank')
 
         # Reset index to make Symbol a column
-        df = df.reset_index().rename(columns={'index': 'Symbol'})
+        # Depending on how the index is named, it might be 'index' or 'Ticker'
+        if df.index.name == 'Ticker':
+            df = df.reset_index().rename(columns={'Ticker': 'Symbol'})
+        else:
+            df = df.reset_index().rename(columns={'index': 'Symbol'})
 
         return df
