@@ -1,4 +1,7 @@
 
+import os
+import json
+
 # URLs for Nifty Indices Constituents
 INDICES_URLS = {
     "NIFTY 50": "https://niftyindices.com/IndexConstituent/ind_nifty50list.csv",
@@ -8,6 +11,11 @@ INDICES_URLS = {
     "NIFTY MICROCAP 250": "https://niftyindices.com/IndexConstituent/ind_niftymicrocap250_list.csv",
     "NIFTY TOTAL MARKET": "https://niftyindices.com/IndexConstituent/ind_niftytotalmarket_list.csv"
 }
+if os.environ.get("INDICES_URLS_JSON"):
+    try:
+        INDICES_URLS = json.loads(os.environ.get("INDICES_URLS_JSON"))
+    except json.JSONDecodeError:
+        pass
 
 # Momentum Strategy Constants
 # Windows in days (approx trading days: 1m=21, 3m=63, etc.)
@@ -15,6 +23,11 @@ MOMENTUM_WINDOWS = [21, 63, 126, 189, 252]
 
 # Weights corresponding to the windows
 MOMENTUM_WEIGHTS = [0.1, 0.3, 0.3, 0.2, 0.1]
+if os.environ.get("MOMENTUM_WEIGHTS_JSON"):
+    try:
+        MOMENTUM_WEIGHTS = json.loads(os.environ.get("MOMENTUM_WEIGHTS_JSON"))
+    except json.JSONDecodeError:
+        pass
 
 # Minimum history required (days)
 MIN_HISTORY_DAYS = 260
