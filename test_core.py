@@ -13,8 +13,9 @@ def test_fetch_constituents():
     print("get_constituents Passed.")
     return tickers
 
-def test_momentum_logic(tickers):
+def test_momentum_logic():
     print("Testing Momentum Logic...")
+    tickers = get_constituents(["NIFTY 50"])
     # Use a subset to save time if list is long
     subset = tickers[:10] if len(tickers) > 10 else tickers
     print(f"Fetching price data for {len(subset)} tickers...")
@@ -39,5 +40,5 @@ def test_momentum_logic(tickers):
     print("Momentum Logic Passed.")
 
 if __name__ == "__main__":
-    tickers = test_fetch_constituents()
-    test_momentum_logic(tickers)
+    test_fetch_constituents()
+    test_momentum_logic()
