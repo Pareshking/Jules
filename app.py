@@ -1,142 +1,94 @@
 import streamlit as st
 import pandas as pd
 from core.config import INDICES_URLS
-from core.fetcher import get_constituents, fetch_price_data
-from core.momentum import MomentumAnalyzer
+from core.fetcher import get_nifty_constituents, get_historical_prices
+from core.momentum import calculate_momentum
 
-# Page Config
-st.set_page_config(
-    page_title="Nifty Momentum Ranking",
-    page_icon="📈",
-    layout="wide"
+st.set_page_config(page_title="Momentum Investing Framework", layout="wide")
+
+@st.cache_data(ttl=3600)
+def fetch_symbols(selected_indices):
+    urls = [INDICES_URLS[idx] for idx in selected_indices]
+    return get_nifty_constituents(urls)
+
+@st.cache_data(ttl=3600)
+def fetch_data_and_calculate_momentum(symbols):
+    prices_df = get_historical_prices(symbols, period="3y")
+    return calculate_momentum(prices_df)
+
+def color_velocity(val):
+    if not isinstance(val, str):
+        return ''
+    if val.startswith('+'):
+        return 'color: green'
+    elif val.startswith('-'):
+        return 'color: red'
+    elif val == '0':
+        return 'color: black'
+    else:
+        return ''
+
+st.title("Momentum Investing Quant Framework")
+st.markdown("This application ranks stocks based on a robust momentum strategy using weighted Z-scores of Sharpe Ratios.")
+
+st.sidebar.header("Index Selection")
+st.sidebar.markdown("Select one or more indices to scan:")
+selected_indices = st.sidebar.multiselect(
+    "Available Indices",
+    list(INDICES_URLS.keys()),
+    default=["NIFTY 50", "NIFTY NEXT 50"]
 )
 
-# Caching wrappers
-@st.cache_data(ttl=3600, show_spinner=False)
-def get_tickers_cached(indices_names):
-    return get_constituents(indices_names)
+if st.sidebar.button("Run Momentum Scan"):
+    if not selected_indices:
+        st.warning("Please select at least one index to scan.")
+    else:
+        with st.spinner("Fetching index constituents..."):
+            symbols = fetch_symbols(selected_indices)
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def get_prices_cached(tickers):
-    # Fetch 3 years of data to ensure enough history for 1y momentum + lookbacks
-    return fetch_price_data(tickers, period="3y")
-
-@st.cache_data(show_spinner=False)
-def calculate_rankings_cached(prices):
-    analyzer = MomentumAnalyzer(prices)
-    return analyzer.get_rankings()
-
-# Main App
-def main():
-    st.title("🇮🇳 Nifty Momentum Ranking System")
-    st.markdown("""
-    This application ranks Indian stocks based on a **Volatility-Adjusted Momentum** strategy.
-
-    **Strategy:**
-    - Weighted Z-Scores of Sharpe Ratios (1m, 3m, 6m, 9m, 12m).
-    - **Filters:** Price > 50 EMA and Price within 20% of 52-Week High.
-    """)
-
-    # Sidebar
-    st.sidebar.header("Configuration")
-
-    available_indices = list(INDICES_URLS.keys())
-    selected_indices = st.sidebar.multiselect(
-        "Select Indices to Include:",
-        options=available_indices,
-        default=["NIFTY 50"]
-    )
-
-    if st.sidebar.button("Run Analysis", type="primary"):
-        if not selected_indices:
-            st.error("Please select at least one index.")
-            return
-
-        status_text = st.empty()
-        progress_bar = st.progress(0)
-
-        try:
-            # 1. Fetch Constituents
-            status_text.text("Fetching Index Constituents...")
-            tickers = get_tickers_cached(selected_indices)
-            progress_bar.progress(25)
-
-            if not tickers:
-                st.error("No tickers found for the selected indices.")
-                status_text.empty()
-                progress_bar.empty()
-                return
-
-            st.info(f"Identified {len(tickers)} unique stocks from selected indices.")
-
-            # 2. Fetch Prices
-            status_text.text(f"Fetching Price Data for {len(tickers)} stocks... (This may take a moment)")
-            prices = get_prices_cached(tickers)
-            progress_bar.progress(75)
-
-            if prices.empty:
-                st.error("Failed to fetch price data.")
-                status_text.empty()
-                progress_bar.empty()
-                return
-
-            # 3. Calculate Momentum
-            status_text.text("Calculating Momentum Scores and Ranks...")
-            results = calculate_rankings_cached(prices)
-            progress_bar.progress(100)
-
-            status_text.empty()
-            progress_bar.empty()
+        if not symbols:
+            st.error("Failed to fetch symbols for the selected indices.")
+        else:
+            with st.spinner(f"Fetching historical data and calculating momentum for {len(symbols)} symbols..."):
+                results = fetch_data_and_calculate_momentum(symbols)
 
             if results.empty:
-                st.warning("Analysis completed but returned no results (maybe no stocks passed filters or data issues).")
+                st.warning("No stocks passed the hard filters (Price > 50 EMA and Price >= 80% of 52-Week High).")
             else:
-                st.success(f"Analysis Complete! {len(results)} stocks ranked.")
+                st.success(f"Scan complete! {len(results)} stocks passed the filters.")
 
-                # Display Options
-                st.subheader("Ranked Results")
-
-                # Column formatting configuration
-                format_mapping = {
-                    'Momentum Score': '{:.2f}',
-                    'Price': '{:.2f}',
-                    '50 EMA': '{:.2f}',
-                    '52W High': '{:.2f}',
-                    'Current Rank': '{:.0f}',
-                    'Rank 1M Ago': '{:.0f}',
-                    'Rank 2M Ago': '{:.0f}',
-                    'Rank 3M Ago': '{:.0f}'
+                # Format numerical columns
+                format_dict = {
+                    'Momentum Score': "{:.2f}",
+                    'Price': "{:.2f}",
+                    '50 EMA': "{:.2f}",
+                    '52W High': "{:.2f}",
+                    'Current Rank': "{:.0f}",
+                    'Past Rank': "{:.0f}"
                 }
 
-                # Filter columns to display
-                cols_to_show = [
-                    'Current Rank', 'Symbol', 'Momentum Score', 'Price',
-                    'Filters Passed', 'Above 50 EMA', 'Near 52W High',
-                    'Rank 1M Ago', 'Rank 2M Ago', 'Rank 3M Ago'
-                ]
+                # We need to add '+' to positive rank velocity
+                def format_velocity(val):
+                    if pd.isna(val):
+                        return "NaN"
+                    if val > 0:
+                        return f"+{int(val)}"
+                    return f"{int(val)}"
 
-                # Ensure columns exist
-                cols_to_show = [c for c in cols_to_show if c in results.columns]
+                # Format for display
+                display_df = results.copy()
+                display_df['Rank Velocity'] = display_df['Rank Velocity'].apply(format_velocity)
 
-                st.dataframe(
-                    results[cols_to_show].style.format(format_mapping, na_rep=""),
-                    use_container_width=True,
-                    height=600
-                )
+                # Apply styling using .map() per memory
+                styled_df = display_df.style.format(format_dict).map(color_velocity, subset=['Rank Velocity'])
 
-                # Download CSV
-                csv = results.to_csv(index=False).encode('utf-8')
+                st.dataframe(styled_df, use_container_width=True)
+
+                # CSV Export
+                csv = results.to_csv(index=False)
                 st.download_button(
-                    label="Download Full Results CSV",
+                    label="Download Results as CSV",
                     data=csv,
-                    file_name="nifty_momentum_ranks.csv",
-                    mime="text/csv"
+                    file_name="momentum_ranks.csv",
+                    mime="text/csv",
                 )
-
-        except Exception as e:
-            st.error(f"An error occurred: {str(e)}")
-            # Raise for debugging in logs
-            raise e
-
-if __name__ == "__main__":
-    main()

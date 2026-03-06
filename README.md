@@ -1,5 +1,5 @@
 ---
-title: Nifty Momentum Ranking
+title: Momentum Investing Framework
 emoji: 📈
 colorFrom: blue
 colorTo: green
@@ -8,33 +8,28 @@ app_port: 7860
 pinned: false
 ---
 
-# Nifty Momentum Ranking System
+# Momentum Investing Quant Framework
 
-This application implements a quantitative momentum investing strategy for the Indian Stock Market (Nifty Indices).
-
-## Methodology
-
-The ranking is based on a **Volatility-Adjusted Momentum** score calculated as the weighted average of Z-Scores of Sharpe Ratios across multiple timeframes:
-- **1 Month** (10% weight)
-- **3 Months** (30% weight)
-- **6 Months** (30% weight)
-- **9 Months** (20% weight)
-- **12 Months** (10% weight)
-
-**Hard Filters:**
-- Price must be above the **50-day EMA**.
-- Price must be within **20% of the 52-Week High**.
+This is a Python-based momentum investing framework designed to rank stocks from selected NIFTY indices based on their momentum score (a weighted average of Z-scores of Sharpe Ratios across 1m, 3m, 6m, 9m, and 12m lookbacks). It includes filters to only include stocks where Price > 50 EMA and Price >= 80% of 52-Week High.
 
 ## Features
+- **Modular Core:** Momentum logic, configuration, and data fetching are modularized under the `core/` package.
+- **Web Interface:** Built with Streamlit for seamless configuration and analysis.
+- **Data Fetching:** Automatically fetches the latest constituent symbols for NSE indices directly from niftyindices.com.
+- **Resilient Connectivity:** Uses retry logic (3 retries, backoff factor 0.3) for stability.
+- **Caching:** Uses `st.cache_data` to minimize repetitive data downloading.
+- **Export:** Easily export the final ranked DataFrame as a CSV directly from the browser.
+- **Hugging Face Ready:** Includes a `Dockerfile` and `requirements.txt` specifically optimized for deployment on Hugging Face Spaces using the Docker SDK.
 
-- **Custom Universe Selection**: Choose from NIFTY 50, NEXT 50, MIDCAP 150, SMALLCAP 250, MICROCAP 250, or the entire TOTAL MARKET.
-- **Live Data**: Fetches real-time market data using `yfinance`.
-- **Downloadable Results**: Export the full ranked list to CSV.
+## Local Development
 
-## Project Structure
+```bash
+# Install dependencies
+pip install -r requirements.txt
 
-- `app.py`: Streamlit application entry point.
-- `core/`: Modular logic for data fetching and momentum calculation.
-    - `fetcher.py`: Handles fetching constituents and price data.
-    - `momentum.py`: Contains the `MomentumAnalyzer` class logic.
-    - `config.py`: Configuration for indices URLs and strategy parameters.
+# Run the tests
+python -m pytest test_core.py
+
+# Run the application
+streamlit run app.py
+```
