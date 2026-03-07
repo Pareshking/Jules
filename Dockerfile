@@ -1,20 +1,18 @@
 FROM python:3.10-slim
 
+# Create unprivileged user for Hugging Face Spaces security
+RUN useradd -m -u 1000 user
+USER user
+
+ENV PATH="/home/user/.local/bin:$PATH"
+
 WORKDIR /app
 
-# Install system dependencies if any (none strictly needed for these python libs usually)
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    curl \
-    software-properties-common \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+COPY --chown=user:user requirements.txt .
 
-COPY requirements.txt .
+RUN pip3 install --user --no-cache-dir -r requirements.txt
 
-RUN pip3 install --no-cache-dir -r requirements.txt
-
-COPY . .
+COPY --chown=user:user . .
 
 EXPOSE 7860
 
