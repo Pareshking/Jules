@@ -1,7 +1,5 @@
 FROM python:3.10-slim
 
-WORKDIR /app
-
 # Install system dependencies if any (none strictly needed for these python libs usually)
 RUN apt-get update && apt-get install -y \
     build-essential \
@@ -10,11 +8,17 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+RUN useradd -m -u 1000 user
+USER user
+ENV PATH="/home/user/.local/bin:$PATH"
+
+WORKDIR /app
+
+COPY --chown=user requirements.txt .
 
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY --chown=user . .
 
 EXPOSE 7860
 

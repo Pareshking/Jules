@@ -13,10 +13,10 @@ def test_fetch_constituents():
     print("get_constituents Passed.")
     return tickers
 
-def test_momentum_logic(tickers):
+def test_momentum_logic():
     print("Testing Momentum Logic...")
-    # Use a subset to save time if list is long
-    subset = tickers[:10] if len(tickers) > 10 else tickers
+    # Fetch a small set of predefined tickers to avoid depending on get_constituents
+    subset = ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS"]
     print(f"Fetching price data for {len(subset)} tickers...")
 
     prices = fetch_price_data(subset, period="2y") # 2y is enough for calculation (need > 1y for 12m momentum)
@@ -39,5 +39,5 @@ def test_momentum_logic(tickers):
     print("Momentum Logic Passed.")
 
 if __name__ == "__main__":
-    tickers = test_fetch_constituents()
-    test_momentum_logic(tickers)
+    test_fetch_constituents()
+    test_momentum_logic()
