@@ -14,7 +14,11 @@ COPY requirements.txt .
 
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-COPY . .
+# Run as an unprivileged user (UID 1000) for security on Hugging Face Spaces
+RUN useradd -m -u 1000 user
+USER user
+
+COPY --chown=user . .
 
 EXPOSE 7860
 

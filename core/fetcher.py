@@ -1,9 +1,19 @@
 import pandas as pd
 import yfinance as yf
 import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 import io
 from typing import List
 from .config import INDICES_URLS
+
+def get_session():
+    session = requests.Session()
+    retry = Retry(connect=3, backoff_factor=0.3)
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+    return session
 
 def get_constituents(indices_names: List[str]) -> List[str]:
     """
@@ -23,7 +33,8 @@ def get_constituents(indices_names: List[str]) -> List[str]:
 
         print(f"Fetching {index_name} from {url}...")
         try:
-            response = requests.get(url, headers=headers, timeout=10)
+            session = get_session()
+            response = session.get(url, headers=headers, timeout=10)
             response.raise_for_status()
             csv_content = response.content.decode('utf-8')
 
@@ -54,8 +65,8 @@ def get_constituents(indices_names: List[str]) -> List[str]:
         except Exception as e:
             print(f"Error fetching {index_name}: {e}")
 
-    # Clean and append .NS
-    cleaned_symbols = [f"{sym}.NS" for sym in all_symbols if sym]
+    # Clean, filter 'DUMMY', and append .NS
+    cleaned_symbols = [f"{sym}.NS" for sym in all_symbols if sym and not sym.startswith('DUMMY')]
     return sorted(list(set(cleaned_symbols)))
 
 def fetch_price_data(tickers: List[str], period: str = "3y") -> pd.DataFrame:
@@ -100,5 +111,8 @@ def fetch_price_data(tickers: List[str], period: str = "3y") -> pd.DataFrame:
         # If it's a series, the column name might be 'Close', rename to ticker
         if len(tickers) == 1:
             close_data.columns = tickers
+
+    if isinstance(close_data.index, pd.DatetimeIndex):
+        close_data.index = close_data.index.tz_localize(None)
 
     return close_data
