@@ -14,7 +14,11 @@ COPY requirements.txt .
 
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-COPY . .
+# Create a non-root user with UID 1000 for Hugging Face Spaces
+RUN useradd -m -u 1000 user
+USER user
+
+COPY --chown=user:user . .
 
 EXPOSE 7860
 
