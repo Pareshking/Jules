@@ -3,3 +3,7 @@ pandas
 yfinance
 requests
 numpy
+openpyxl
+jinja2
+pytest
+urllib3
