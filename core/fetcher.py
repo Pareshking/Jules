@@ -1,104 +1,94 @@
+import io
+import time
+import requests
 import pandas as pd
 import yfinance as yf
-import requests
-import io
-from typing import List
-from .config import INDICES_URLS
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+from core.config import INDICES_URLS, HEADERS
 
-def get_constituents(indices_names: List[str]) -> List[str]:
-    """
-    Fetches constituents for the selected indices from the NSE website.
-    Returns a list of unique symbols with '.NS' appended.
-    """
+def get_session():
+    """Create a requests session with retry logic."""
+    session = requests.Session()
+    retry = Retry(connect=3, backoff_factor=0.3)
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+    return session
+
+def fetch_constituents(index_names):
+    """Fetch and combine constituents from selected index names."""
+    if not isinstance(index_names, list):
+        index_names = [index_names]
+
+    session = get_session()
     all_symbols = set()
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    }
 
-    for index_name in indices_names:
-        url = INDICES_URLS.get(index_name)
-        if not url:
-            print(f"Warning: URL for {index_name} not found.")
-            continue
+    for name in index_names:
+        if name in INDICES_URLS:
+            url = INDICES_URLS[name]
+            try:
+                response = session.get(url, headers=HEADERS, timeout=10)
+                response.raise_for_status()
+                # Parse CSV content
+                df = pd.read_csv(io.StringIO(response.text))
 
-        print(f"Fetching {index_name} from {url}...")
-        try:
-            response = requests.get(url, headers=headers, timeout=10)
-            response.raise_for_status()
-            csv_content = response.content.decode('utf-8')
+                # Check column name (usually 'Symbol' or 'Symbol \n')
+                symbol_col = next((col for col in df.columns if 'Symbol' in col), None)
+                if symbol_col:
+                    symbols = df[symbol_col].dropna().str.strip().tolist()
+                    # Filter out symbols starting with 'DUMMY'
+                    valid_symbols = [s for s in symbols if not s.startswith('DUMMY')]
+                    all_symbols.update(valid_symbols)
+            except Exception as e:
+                print(f"Error fetching {name} from {url}: {e}")
 
-            # Read CSV
-            df = pd.read_csv(io.StringIO(csv_content), sep=",")
+    return sorted(list(all_symbols))
 
-            # Normalize column names
-            df.columns = [c.strip() for c in df.columns]
+def fetch_historical_prices(symbols, period='3y', interval='1d'):
+    """Fetch historical price data for symbols using yfinance."""
+    # Append .NS for NSE stocks
+    yf_symbols = [f"{sym}.NS" for sym in symbols]
 
-            # Identify Symbol column
-            symbol_col = None
-            for col in df.columns:
-                if col.lower() == 'symbol':
-                    symbol_col = col
-                    break
-
-            if not symbol_col:
-                # Fallback: usually 3rd column
-                if len(df.columns) > 2:
-                    symbol_col = df.columns[2]
-
-            if symbol_col:
-                symbols = df[symbol_col].dropna().astype(str).tolist()
-                all_symbols.update([s.strip() for s in symbols])
-            else:
-                print(f"Warning: Could not identify Symbol column for {index_name}")
-
-        except Exception as e:
-            print(f"Error fetching {index_name}: {e}")
-
-    # Clean and append .NS
-    cleaned_symbols = [f"{sym}.NS" for sym in all_symbols if sym]
-    return sorted(list(set(cleaned_symbols)))
-
-def fetch_price_data(tickers: List[str], period: str = "3y") -> pd.DataFrame:
-    """
-    Fetches OHLCV data for the given tickers using yfinance.
-    Returns a DataFrame of Close prices.
-    """
-    if not tickers:
-        return pd.DataFrame()
-
-    print(f"Fetching data for {len(tickers)} tickers...")
     try:
-        # auto_adjust=True ensures Close is adjusted for splits and dividends
-        # threads=True is default but good to be explicit
-        data = yf.download(tickers, period=period, auto_adjust=True, progress=False, threads=True)
+        # Download data
+        data = yf.download(
+            tickers=yf_symbols,
+            period=period,
+            interval=interval,
+            group_by='ticker',
+            auto_adjust=False,
+            prepost=False,
+            threads=True,
+            progress=False
+        )
+
+        # Flatten MultiIndex columns if necessary
+        if isinstance(data.columns, pd.MultiIndex):
+            # We want 'Close' prices for each ticker.
+            # yfinance groups by ticker when group_by='ticker' is used
+            # so columns are (Ticker, Open/High/Low/Close/Volume)
+            close_data = {}
+            for ticker in yf_symbols:
+                if ticker in data.columns.levels[0]:
+                    if 'Close' in data[ticker].columns:
+                        close_data[ticker.replace('.NS', '')] = data[ticker]['Close']
+
+            # Combine back into a DataFrame
+            df = pd.DataFrame(close_data)
+        else:
+            # Single ticker case
+            if 'Close' in data.columns:
+                df = pd.DataFrame({symbols[0]: data['Close']})
+            else:
+                df = pd.DataFrame()
+
+        # Remove timezone information from datetime index to ensure consistency
+        if df.index.tz is not None:
+            df.index = df.index.tz_localize(None)
+
+        return df
+
     except Exception as e:
-        print(f"Error fetching data via yfinance: {e}")
+        print(f"Error fetching historical prices: {e}")
         return pd.DataFrame()
-
-    if data.empty:
-        return pd.DataFrame()
-
-    # Extract Close prices
-    # If multiple tickers, 'Close' is a DataFrame. If single, Series.
-    # yfinance output structure changed recently, 'Close' might be top level or under Price type
-
-    # Check if MultiIndex columns (Price, Ticker)
-    if isinstance(data.columns, pd.MultiIndex):
-        try:
-            close_data = data['Close']
-        except KeyError:
-            # Maybe it is just data if flattened?
-             close_data = data
-    elif 'Close' in data.columns:
-        close_data = data['Close']
-    else:
-        close_data = data
-
-    # Ensure it's a DataFrame (dates x tickers)
-    if isinstance(close_data, pd.Series):
-        close_data = close_data.to_frame()
-        # If it's a series, the column name might be 'Close', rename to ticker
-        if len(tickers) == 1:
-            close_data.columns = tickers
-
-    return close_data

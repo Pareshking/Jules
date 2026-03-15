@@ -1,124 +1,183 @@
-import pandas as pd
 import numpy as np
-from .config import MOMENTUM_WINDOWS, MOMENTUM_WEIGHTS
+import pandas as pd
+from core.config import MOMENTUM_WEIGHTS
 
-class MomentumAnalyzer:
-    def __init__(self, prices: pd.DataFrame):
-        self.prices = prices
-        self.momentum_scores = None
+def calculate_returns_volatility(prices, periods_days):
+    """
+    Calculate annualized returns and volatility for given periods.
+    prices: DataFrame of daily closing prices.
+    periods_days: dictionary of label to number of trading days.
+    """
+    metrics = {}
+    for label, days in periods_days.items():
+        if len(prices) > days:
+            # Calculate return over the period
+            period_return = (prices.iloc[-1] / prices.iloc[-days-1]) - 1
 
-    def calculate_momentum_score(self) -> pd.DataFrame:
-        """
-        Calculates the momentum scores and ranks for the entire history (vectorized).
-        Returns a DataFrame of Weighted Momentum Scores (index=Date, columns=Tickers).
-        """
-        if self.prices.empty:
-            return None
+            # Calculate daily returns for the period to find volatility
+            period_prices = prices.iloc[-days-1:]
+            daily_returns = period_prices.pct_change().dropna()
 
-        # Daily Returns
-        daily_returns = self.prices.pct_change(fill_method=None)
+            # Annualize return and volatility
+            ann_return = period_return * (252 / days)
+            ann_vol = daily_returns.std() * np.sqrt(252)
 
-        # Initialize Score DataFrame
-        weighted_z_score = pd.DataFrame(0.0, index=self.prices.index, columns=self.prices.columns)
+            # Calculate Sharpe ratio (assuming 0 risk-free rate for simplicity, typical in momentum)
+            sharpe = ann_return / ann_vol
 
-        for w, weight in zip(MOMENTUM_WINDOWS, MOMENTUM_WEIGHTS):
-            # Rolling Return
-            # (Price_t / Price_{t-w}) - 1
-            period_ret = (self.prices / self.prices.shift(w)) - 1
+            metrics[f'{label}_return'] = ann_return
+            metrics[f'{label}_vol'] = ann_vol
+            metrics[f'{label}_sharpe'] = sharpe
+        else:
+            # Not enough data for this period
+            metrics[f'{label}_return'] = pd.Series(np.nan, index=prices.columns)
+            metrics[f'{label}_vol'] = pd.Series(np.nan, index=prices.columns)
+            metrics[f'{label}_sharpe'] = pd.Series(np.nan, index=prices.columns)
 
-            # Rolling Volatility (Daily Std Dev over window)
-            period_vol = daily_returns.rolling(window=w).std()
+    return pd.DataFrame(metrics)
 
-            # Sharpe Ratio
-            # Avoid division by zero
-            sharpe = period_ret.div(period_vol.replace(0, np.nan))
+def calculate_ema(prices, window=50):
+    """Calculate Exponential Moving Average."""
+    return prices.ewm(span=window, adjust=False).mean()
 
-            # Z-Score (Cross-sectional per day)
-            # Calculate mean and std for each row (date)
-            mean_sharpe = sharpe.mean(axis=1)
-            std_sharpe = sharpe.std(axis=1)
+def calculate_momentum_score(metrics_df):
+    """Calculate the final momentum score using weighted Z-scores of Sharpe ratios."""
+    score = pd.Series(0.0, index=metrics_df.index)
+    total_weight = 0
 
-            # Broadcast subtraction and division
-            # (sharpe - mean) / std
-            z_score = sharpe.sub(mean_sharpe, axis=0).div(std_sharpe, axis=0)
+    for label, weight in MOMENTUM_WEIGHTS.items():
+        sharpe_col = f'{label}_sharpe'
+        if sharpe_col in metrics_df.columns:
+            # Calculate Z-score for the Sharpe ratio
+            # Ignore NaNs during standard deviation calculation
+            sharpe_values = metrics_df[sharpe_col]
+            z_score = (sharpe_values - sharpe_values.mean()) / sharpe_values.std()
 
-            # Handle NaNs: If a stock has NaN Sharpe (e.g. newly listed), Z-Score is NaN.
-            # We fill NaN with 0 (neutral score) so it doesn't break the sum.
-            weighted_z_score = weighted_z_score.add(z_score.fillna(0) * weight, fill_value=0)
+            # Fill NaNs with 0 (average Z-score) so missing data doesn't break everything,
+            # or could drop. We'll fill with 0 to penalize less.
+            z_score = z_score.fillna(0)
 
-        self.momentum_scores = weighted_z_score
-        return weighted_z_score
+            score += z_score * weight
+            total_weight += weight
 
-    def get_rankings(self) -> pd.DataFrame:
-        """
-        Generates the final ranking DataFrame with filters.
-        """
-        if self.momentum_scores is None:
-            self.calculate_momentum_score()
+    # Normalize score if weights don't sum to exactly 1
+    if total_weight > 0:
+        score = score / total_weight
 
-        if self.momentum_scores is None or self.prices.empty:
-            return pd.DataFrame()
+    return score
 
-        # Current Data (Last available row)
-        current_prices = self.prices.iloc[-1]
+def calculate_momentum(prices_df):
+    """
+    Main function to calculate momentum rankings and apply filters.
+    """
+    if prices_df.empty:
+        return pd.DataFrame()
 
-        # 50 EMA
-        ema_50 = self.prices.ewm(span=50, adjust=False).mean().iloc[-1]
+    # Periods in trading days (approximate)
+    periods = {
+        '1m': 21,
+        '3m': 63,
+        '6m': 126,
+        '9m': 189,
+        '12m': 252
+    }
 
-        # 52 Week High (max of last 252 days)
-        high_52 = self.prices.rolling(window=252).max().iloc[-1]
+    # 1. Calculate metrics (Returns, Volatility, Sharpe)
+    metrics_df = calculate_returns_volatility(prices_df, periods)
 
-        # Indices for T, T-1m, T-2m, T-3m
-        # We use negative indexing based on trading days approx (21 days/month)
-        max_idx = len(self.momentum_scores)
+    # 2. Calculate current indicators for filtering
+    current_price = prices_df.iloc[-1]
 
-        indices = {
-            'Current': -1,
-            '1M Ago': -22,
-            '2M Ago': -43,
-            '3M Ago': -64
-        }
+    # 50 EMA
+    ema_50 = calculate_ema(prices_df, 50).iloc[-1]
 
-        # Helper to get rank series for a specific time offset
-        def get_rank_series(offset_idx):
-            # Check bounds (if history is shorter than offset)
-            if abs(offset_idx) > max_idx:
-                return pd.Series(np.nan, index=self.momentum_scores.columns)
+    # 52-Week High (approx 252 trading days)
+    if len(prices_df) >= 252:
+        high_52w = prices_df.iloc[-252:].max()
+    else:
+        high_52w = prices_df.max()
 
-            # Get scores at that index
-            scores = self.momentum_scores.iloc[offset_idx]
+    # Combine into a single DataFrame
+    results = pd.DataFrame({
+        'Price': current_price,
+        '50_EMA': ema_50,
+        '52W_High': high_52w
+    })
 
-            # Rank descending (Higher score = Rank 1)
-            return scores.rank(ascending=False)
+    # Add metrics
+    results = pd.concat([results, metrics_df], axis=1)
 
-        # Base DataFrame
-        df = pd.DataFrame(index=self.prices.columns)
+    # 3. Apply Hard Filters: Price > 50 EMA and Price >= 80% of 52-Week High
+    filter_mask = (results['Price'] > results['50_EMA']) & (results['Price'] >= 0.8 * results['52W_High'])
+    filtered_results = results[filter_mask].copy()
 
-        # Add Score
-        try:
-            df['Momentum Score'] = self.momentum_scores.iloc[indices['Current']]
-        except IndexError:
-            df['Momentum Score'] = np.nan
+    if filtered_results.empty:
+        return pd.DataFrame()
 
-        df['Price'] = current_prices
-        df['50 EMA'] = ema_50
-        df['52W High'] = high_52
+    # 4. Calculate Momentum Score on filtered universe
+    momentum_score = calculate_momentum_score(filtered_results)
+    filtered_results['Momentum_Score'] = momentum_score
 
-        # Add Ranks
-        df['Current Rank'] = get_rank_series(indices['Current'])
-        df['Rank 1M Ago'] = get_rank_series(indices['1M Ago'])
-        df['Rank 2M Ago'] = get_rank_series(indices['2M Ago'])
-        df['Rank 3M Ago'] = get_rank_series(indices['3M Ago'])
+    # 5. Rank Current
+    # Sort descending by Momentum Score
+    filtered_results = filtered_results.sort_values(by='Momentum_Score', ascending=False)
+    filtered_results['Rank'] = np.arange(1, len(filtered_results) + 1)
 
-        # Apply Filters
-        df['Above 50 EMA'] = df['Price'] > df['50 EMA']
-        df['Near 52W High'] = df['Price'] >= (0.8 * df['52W High'])
-        df['Filters Passed'] = df['Above 50 EMA'] & df['Near 52W High']
+    # 6. Calculate Past Rank (1 month ago)
+    # We need to simulate the exact same process 21 trading days ago
+    if len(prices_df) > 21:
+        past_prices_df = prices_df.iloc[:-21]
 
-        # Sort
-        df = df.sort_values('Current Rank')
+        # Calculate past metrics
+        past_metrics_df = calculate_returns_volatility(past_prices_df, periods)
 
-        # Reset index to make Symbol a column
-        df = df.reset_index().rename(columns={'index': 'Symbol'})
+        past_current_price = past_prices_df.iloc[-1]
+        past_ema_50 = calculate_ema(past_prices_df, 50).iloc[-1]
 
-        return df
+        if len(past_prices_df) >= 252:
+            past_high_52w = past_prices_df.iloc[-252:].max()
+        else:
+            past_high_52w = past_prices_df.max()
+
+        past_results = pd.DataFrame({
+            'Price': past_current_price,
+            '50_EMA': past_ema_50,
+            '52W_High': past_high_52w
+        })
+        past_results = pd.concat([past_results, past_metrics_df], axis=1)
+
+        # Apply past filters
+        past_filter_mask = (past_results['Price'] > past_results['50_EMA']) & (past_results['Price'] >= 0.8 * past_results['52W_High'])
+        past_filtered_results = past_results[past_filter_mask].copy()
+
+        if not past_filtered_results.empty:
+            past_momentum_score = calculate_momentum_score(past_filtered_results)
+            past_filtered_results['Momentum_Score'] = past_momentum_score
+            past_filtered_results = past_filtered_results.sort_values(by='Momentum_Score', ascending=False)
+            past_filtered_results['Past_Rank'] = np.arange(1, len(past_filtered_results) + 1)
+
+            # Map past rank to current results
+            filtered_results['Past_Rank'] = past_filtered_results['Past_Rank']
+        else:
+            filtered_results['Past_Rank'] = np.nan
+    else:
+        filtered_results['Past_Rank'] = np.nan
+
+    # Fill missing past ranks with len+1 (meaning it wasn't ranked)
+    max_rank = len(filtered_results) + 1
+    filtered_results['Past_Rank'] = filtered_results['Past_Rank'].fillna(max_rank)
+
+    # 7. Calculate Rank Velocity
+    # Positive means improvement (Past Rank > Current Rank)
+    filtered_results['Rank_Velocity'] = filtered_results['Past_Rank'] - filtered_results['Rank']
+
+    # Clean up dataframe structure
+    # Reset index and rename index column to 'Symbol'
+    filtered_results = filtered_results.reset_index()
+    filtered_results = filtered_results.rename(columns={'index': 'Symbol', 'ticker': 'Symbol'})
+
+    # Select columns to display
+    display_cols = ['Symbol', 'Momentum_Score', 'Rank', 'Rank_Velocity', 'Price', '50_EMA', '52W_High']
+    # Add returns if needed, but keeping it focused on core framework
+
+    return filtered_results[display_cols].copy()
